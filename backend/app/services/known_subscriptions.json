@@ -1,0 +1,157 @@
+{
+  "netflix": {
+    "display_name": "Netflix",
+    "category": "Entertainment",
+    "cancel_url": "https://www.netflix.com/cancelplan"
+  },
+  "spotify": {
+    "display_name": "Spotify",
+    "category": "Entertainment",
+    "cancel_url": "https://www.spotify.com/account/subscription/cancel"
+  },
+  "hulu": {
+    "display_name": "Hulu",
+    "category": "Entertainment",
+    "cancel_url": "https://secure.hulu.com/account/cancel"
+  },
+  "disney": {
+    "display_name": "Disney+",
+    "category": "Entertainment",
+    "cancel_url": "https://www.disneyplus.com/account"
+  },
+  "apple": {
+    "display_name": "Apple Services",
+    "category": "Productivity",
+    "cancel_url": "https://support.apple.com/en-us/HT202039"
+  },
+  "amazon prime": {
+    "display_name": "Amazon Prime",
+    "category": "Shopping",
+    "cancel_url": "https://www.amazon.com/mc/pipeline/cancelation"
+  },
+  "youtube": {
+    "display_name": "YouTube Premium",
+    "category": "Entertainment",
+    "cancel_url": "https://www.youtube.com/paid_memberships"
+  },
+  "hbo": {
+    "display_name": "Max (HBO)",
+    "category": "Entertainment",
+    "cancel_url": "https://help.max.com/us/Answer/Detail/000002576"
+  },
+  "paramount": {
+    "display_name": "Paramount+",
+    "category": "Entertainment",
+    "cancel_url": "https://www.paramountplus.com/account/cancel-subscription"
+  },
+  "peacock": {
+    "display_name": "Peacock",
+    "category": "Entertainment",
+    "cancel_url": "https://www.peacocktv.com/help/article/how-do-i-cancel-my-peacock-subscription"
+  },
+  "adobe": {
+    "display_name": "Adobe Creative Cloud",
+    "category": "Productivity",
+    "cancel_url": "https://helpx.adobe.com/manage-account/using/cancel-subscription.html"
+  },
+  "microsoft": {
+    "display_name": "Microsoft 365",
+    "category": "Productivity",
+    "cancel_url": "https://account.microsoft.com/services"
+  },
+  "dropbox": {
+    "display_name": "Dropbox",
+    "category": "Productivity",
+    "cancel_url": "https://www.dropbox.com/account/plan"
+  },
+  "google one": {
+    "display_name": "Google One",
+    "category": "Productivity",
+    "cancel_url": "https://one.google.com/storage"
+  },
+  "chatgpt": {
+    "display_name": "ChatGPT Plus",
+    "category": "AI Tools",
+    "cancel_url": "https://chat.openai.com/account/billing"
+  },
+  "claude": {
+    "display_name": "Claude Pro",
+    "category": "AI Tools",
+    "cancel_url": "https://claude.ai/settings"
+  },
+  "github": {
+    "display_name": "GitHub",
+    "category": "Developer Tools",
+    "cancel_url": "https://github.com/settings/billing"
+  },
+  "notion": {
+    "display_name": "Notion",
+    "category": "Productivity",
+    "cancel_url": "https://www.notion.so/profile/billing"
+  },
+  "slack": {
+    "display_name": "Slack",
+    "category": "Productivity",
+    "cancel_url": "https://slack.com/intl/en-us/help/articles/218915077"
+  },
+  "zoom": {
+    "display_name": "Zoom",
+    "category": "Productivity",
+    "cancel_url": "https://support.zoom.us/hc/en-us/articles/201363223"
+  },
+  "duolingo": {
+    "display_name": "Duolingo Plus",
+    "category": "Education",
+    "cancel_url": "https://support.duolingo.com/hc/en-us/articles/360043909872"
+  },
+  "calm": {
+    "display_name": "Calm",
+    "category": "Health & Wellness",
+    "cancel_url": "https://support.calm.com/hc/en-us/articles/115002473172"
+  },
+  "headspace": {
+    "display_name": "Headspace",
+    "category": "Health & Wellness",
+    "cancel_url": "https://help.headspace.com/hc/en-us/articles/115007473248"
+  },
+  "peloton": {
+    "display_name": "Peloton",
+    "category": "Health & Wellness",
+    "cancel_url": "https://support.onepeloton.com/hc/en-us/articles/203537615"
+  },
+  "nytimes": {
+    "display_name": "New York Times",
+    "category": "News",
+    "cancel_url": "https://www.nytimes.com/subscription/cancel.html"
+  },
+  "wsj": {
+    "display_name": "Wall Street Journal",
+    "category": "News",
+    "cancel_url": "https://customercenter.wsj.com/home"
+  },
+  "linkedin": {
+    "display_name": "LinkedIn Premium",
+    "category": "Career",
+    "cancel_url": "https://www.linkedin.com/psettings/premium/cancel"
+  },
+  "audible": {
+    "display_name": "Audible",
+    "category": "Entertainment",
+    "cancel_url": "https://www.audible.com/account/cancel-membership"
+  },
+  "kindle": {
+    "display_name": "Kindle Unlimited",
+    "category": "Entertainment",
+    "cancel_url": "https://www.amazon.com/kindle-dbs/hz/subscribe/ku/cancel"
+  },
+  "twitch": {
+    "display_name": "Twitch",
+    "category": "Entertainment",
+    "cancel_url": "https://www.twitch.tv/subscriptions"
+  },
+  "crunchyroll": {
+    "display_name": "Crunchyroll",
+    "category": "Entertainment",
+    "cancel_url": "https://www.crunchyroll.com/account/membership"
+  }
+}
