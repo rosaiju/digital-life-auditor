@@ -2,11 +2,11 @@ import json
 from collections import defaultdict
 from datetime import datetime
 
-from openai import OpenAI
+from groq import Groq
 
 from app.config import settings
 
-client = OpenAI(api_key=settings.openai_api_key)
+client = Groq(api_key=settings.groq_api_key)
 
 
 def generate_insights(subscriptions: list) -> dict:
@@ -70,7 +70,7 @@ Rules:
 """
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="llama-3.1-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
         response_format={"type": "json_object"},

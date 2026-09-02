@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 10080  # 7 days
-    openai_api_key: str
+    groq_api_key: str
     airflow_sync_secret: str = "airflowsecret"
 
     class Config:
