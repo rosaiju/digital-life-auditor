@@ -1,0 +1,85 @@
+version: "3.8"
+
+x-airflow-env: &airflow-env
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://dlauser:dlapassword@postgres:5432/airflow
+  AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+  DLA_API_URL: http://backend:8000
+  DLA_AIRFLOW_SECRET: ${AIRFLOW_SYNC_SECRET:-airflowsecret}
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: dlauser
+      POSTGRES_PASSWORD: dlapassword
+      POSTGRES_MULTIPLE_DATABASES: digital_life_auditor,airflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dlauser"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://dlauser:dlapassword@postgres:5432/digital_life_auditor
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  airflow-init:
+    image: apache/airflow:2.9.0
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: version
+
+  airflow-webserver:
+    image: apache/airflow:2.9.0
+    environment:
+      <<: *airflow-env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+    depends_on:
+      - airflow-init
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.0
+    environment:
+      <<: *airflow-env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+    depends_on:
+      - airflow-init
+    command: scheduler
+
+volumes:
+  postgres_data:
