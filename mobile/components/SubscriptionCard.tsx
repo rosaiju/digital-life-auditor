@@ -90,8 +90,13 @@ export function SubscriptionCard({ subscription: s, onDismiss }: Props) {
             </Text>
           </View>
           {s.cancel_url && (
-            <TouchableOpacity style={styles.cancelBtn} onPress={openCancelPage}>
-              <Text style={styles.cancelText}>Cancel</Text>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={openCancelPage}
+              accessibilityRole="link"
+              accessibilityLabel={`Open cancellation page for ${s.display_name ?? s.merchant_name}`}
+            >
+              <Text style={styles.cancelText}>Cancel plan</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity

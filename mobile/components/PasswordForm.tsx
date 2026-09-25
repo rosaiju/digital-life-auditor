@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { confirm } from "@/utils/alerts";
 
 export interface PasswordField {
   key: string;
@@ -16,6 +17,8 @@ interface Props {
   fields: PasswordField[];
   submitLabel: string;
   destructive?: boolean;
+  /** Asks "are you sure?" after the fields validate, before submitting. */
+  confirmation?: { title: string; message: string; confirmLabel: string };
   /** Return an error message to show, or null when the values are acceptable. */
   validate?: (values: Record<string, string>) => string | null;
   onSubmit: (values: Record<string, string>) => Promise<void>;
@@ -29,6 +32,7 @@ export function PasswordForm({
   fields,
   submitLabel,
   destructive,
+  confirmation,
   validate,
   onSubmit,
   errorMessage,
@@ -38,13 +42,7 @@ export function PasswordForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit() {
-    if (loading) return;
-    const problem = fields.some((f) => !values[f.key]) ? "Please fill in every field" : validate?.(values) ?? null;
-    if (problem) {
-      setError(problem);
-      return;
-    }
+  async function run() {
     setError(null);
     setLoading(true);
     try {
@@ -54,6 +52,17 @@ export function PasswordForm({
     } finally {
       setLoading(false);
     }
+  }
+
+  function submit() {
+    if (loading) return;
+    const problem = fields.some((f) => !values[f.key]) ? "Please fill in every field" : validate?.(values) ?? null;
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    if (confirmation) confirm({ ...confirmation, destructive }, run);
+    else void run();
   }
 
   return (

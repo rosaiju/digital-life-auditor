@@ -12,6 +12,11 @@ export default function DeleteAccount() {
       fields={[{ key: "password", placeholder: "Your password", autoComplete: "current-password" }]}
       submitLabel="Delete my account"
       destructive
+      confirmation={{
+        title: "Delete account?",
+        message: "Everything will be permanently erased and your banks disconnected. This can't be undone.",
+        confirmLabel: "Delete forever",
+      }}
       onSubmit={async (v) => {
         await authApi.deleteAccount(v.password);
         await logout(); // clears the session and cached data; the auth guard returns to sign-in

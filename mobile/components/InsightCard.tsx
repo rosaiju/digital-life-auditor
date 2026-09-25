@@ -25,7 +25,7 @@ export function InsightCard({ insight }: Props) {
         <Text style={[styles.title, { color: config.color }]}>{insight.title}</Text>
         {insight.potential_savings > 0 && (
           <Text style={styles.savings}>
-            Save ${insight.potential_savings.toFixed(0)}/mo
+            Save ${insight.potential_savings.toFixed(2)}/mo
           </Text>
         )}
       </View>

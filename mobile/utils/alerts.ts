@@ -39,7 +39,7 @@ export function errorMessage(e: any, fallback = "Something went wrong"): string 
       .filter(Boolean);
     if (messages.length > 0) return messages.join(". ");
   }
-  if (e?.code === "ERR_NETWORK") return "Can't reach the server. Is the backend running?";
+  if (e?.code === "ERR_NETWORK") return "Can't reach the server. Check your connection and try again.";
   if (e?.code === "ECONNABORTED") return "The request timed out. Please try again.";
   if (e?.response?.status >= 500) return "The server had a problem. Please try again shortly.";
   return e?.message || fallback;

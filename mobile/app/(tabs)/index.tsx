@@ -17,6 +17,7 @@ import { SummaryBanner } from "@/components/SummaryBanner";
 import { SubscriptionCard } from "@/components/SubscriptionCard";
 import { EmptyState } from "@/components/EmptyState";
 import { Banner } from "@/components/Banner";
+import { EndedSubscriptions } from "@/components/EndedSubscriptions";
 import { errorMessage, showAlert } from "@/utils/alerts";
 
 export default function Dashboard() {
@@ -49,7 +50,6 @@ export default function Dashboard() {
 
   const monthlyTotal = subscriptions?.reduce((sum, s) => sum + s.monthly_cost, 0) ?? 0;
   const reconnect = needsReconnect(items.data);
-  const endedNames = (ended.data ?? []).map((s) => s.display_name ?? s.merchant_name);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -76,17 +76,12 @@ export default function Dashboard() {
                 onAction={() => router.push({ pathname: "/connect-bank", params: { itemId: String(item.id) } })}
               />
             ))}
-            {syncProblem && <Banner tone="error" message={syncProblem} />}
+            {/* A Reconnect banner already explains a login problem; don't repeat it as a raw error. */}
+            {syncProblem && reconnect.length === 0 && <Banner tone="error" message={syncProblem} />}
             <SummaryBanner monthlyTotal={monthlyTotal} count={subscriptions?.length ?? 0} />
           </View>
         }
-        ListFooterComponent={
-          endedNames.length > 0 ? (
-            <Text style={styles.ended}>
-              No recent charge from {endedNames.join(", ")}: probably cancelled, so not counted above.
-            </Text>
-          ) : null
-        }
+        ListFooterComponent={<EndedSubscriptions subscriptions={ended.data ?? []} />}
         ListEmptyComponent={
           error ? (
             <EmptyState
@@ -146,5 +141,4 @@ const styles = StyleSheet.create({
   },
   connectBtnText: { color: "#6366f1", fontWeight: "600", fontSize: 13 },
   list: { paddingHorizontal: 16, paddingBottom: 32 },
-  ended: { color: "#64748b", fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 12 },
 });

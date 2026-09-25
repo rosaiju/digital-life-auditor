@@ -61,7 +61,11 @@ export default function Settings() {
       }
     } catch (e: any) {
       await queryClient.invalidateQueries({ queryKey: ["plaid-items"] }); // the failure is recorded per bank
-      showAlert("Sync failed", errorMessage(e, "No connected accounts"));
+      if (e?.response?.status === 404) {
+        showAlert("No bank connected", "Connect a bank account first, then sync.");
+      } else {
+        showAlert("Sync failed", errorMessage(e));
+      }
     } finally {
       setSyncing(false);
     }
@@ -71,7 +75,7 @@ export default function Settings() {
     confirm(
       {
         title: "Disconnect bank",
-        message: `Stop tracking ${name ?? "this bank"}? Detected subscriptions stay until you dismiss them.`,
+        message: `Stop syncing ${name ?? "this bank"}? Subscriptions already detected stay in your list, and saved transactions are kept until you delete your account.`,
         confirmLabel: "Disconnect",
         destructive: true,
       },
