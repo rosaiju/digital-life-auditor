@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -13,7 +14,9 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.ratelimit import limit_auth
+from app.services import plaid_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -29,6 +32,15 @@ _DUMMY_HASH = bcrypt.hashpw(b"not-a-real-password", bcrypt.gensalt()).decode()
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+
+
+class PasswordConfirmation(BaseModel):
+    password: str = Field(max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -120,3 +132,42 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+def _require_password(user: User, password: str) -> None:
+    if not verify_password(password, user.hashed_password):
+        raise HTTPException(status_code=403, detail="Incorrect password")
+
+
+@router.post("/change-password", status_code=204, dependencies=[Depends(limit_auth)])
+def change_password(
+    body: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_password(current_user, body.current_password)
+    if body.new_password == body.current_password:
+        raise HTTPException(status_code=400, detail="Choose a different password")
+    current_user.hashed_password = hash_password(body.new_password)
+    db.commit()
+
+
+@router.post("/delete-account", status_code=204, dependencies=[Depends(limit_auth)])
+def delete_account(
+    body: PasswordConfirmation,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Permanently delete the user and everything stored for them, after re-checking the password.
+
+    Bank connections are revoked at Plaid first (best effort: a failure there must not stop
+    the user from deleting their data).
+    """
+    _require_password(current_user, body.password)
+    for item in current_user.plaid_items:
+        try:
+            plaid_service.remove_item(item.access_token)
+        except Exception as exc:  # PlaidError, or a network failure
+            logger.warning("Could not revoke Plaid item %s during account deletion: %s", item.id, exc)
+    db.delete(current_user)
+    db.commit()

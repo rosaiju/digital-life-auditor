@@ -5,7 +5,7 @@
     docker compose exec backend python -m app.seed_demo
 
 Creates a demo user with ~14 months of synthetic transactions (recurring
-subscriptions mixed with everyday spending and a refund), then runs the same
+subscriptions, one of them cancelled, mixed with everyday spending and a refund), then runs the same
 detection pipeline a real bank sync would. Nothing here touches Plaid.
 """
 import argparse
@@ -35,6 +35,7 @@ RECURRING = [
     ("Adobe Creative Cloud", 599.88, 365, 40, None),
     ("NYTimes Digital", 4.25, 7, 2, None),
     ("Amazon Prime Video", 8.99, 30, 24, None),
+    ("Peloton Membership", 44.00, 30, 75, None),       # cancelled ~2 months ago: shows up as "ended"
 ]
 
 # One-off merchants; amounts vary so they must not be detected as subscriptions.
@@ -98,7 +99,7 @@ def seed(email: str = DEMO_EMAIL, password: str = DEMO_PASSWORD, reset: bool = F
             ))
             added += 1
         db.commit()
-        found = sync.refresh_subscriptions(db, user.id)
+        found = sync.refresh_subscriptions(db, user.id, today=today)
         return {"email": email, "transactions_added": added, "subscriptions_found": found}
 
 

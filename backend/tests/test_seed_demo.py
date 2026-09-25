@@ -29,9 +29,12 @@ def run_seed(monkeypatch, db_session, **kwargs):
 
 def test_detects_exactly_the_seeded_subscriptions_and_no_everyday_spending(monkeypatch, db_session):
     result = run_seed(monkeypatch, db_session)
-    found = {s.display_name: (s.amount, s.frequency) for s in db_session.query(Subscription).all()}
-    assert found == EXPECTED
+    active = db_session.query(Subscription).filter(Subscription.status == "active")
+    assert {s.display_name: (s.amount, s.frequency) for s in active} == EXPECTED
     assert result["subscriptions_found"] == len(EXPECTED)
+    # The cancelled one is kept for history but not counted as a current subscription.
+    ended = db_session.query(Subscription).filter(Subscription.status == "ended").all()
+    assert [s.display_name for s in ended] == ["Peloton"]
 
 
 def test_refund_does_not_break_detection(monkeypatch, db_session):
@@ -45,8 +48,9 @@ def test_seed_is_idempotent_and_reset_recreates(monkeypatch, db_session):
     first = run_seed(monkeypatch, db_session)
     second = run_seed(monkeypatch, db_session)
     assert second["transactions_added"] == 0
-    assert db_session.query(Subscription).count() == first["subscriptions_found"]
+    total = db_session.query(Subscription).count()
+    assert total == first["subscriptions_found"] + 1        # + the ended one
 
     run_seed(monkeypatch, db_session, reset=True)
     assert db_session.query(Transaction).count() > 0
-    assert db_session.query(Subscription).count() == first["subscriptions_found"]
+    assert db_session.query(Subscription).count() == total
