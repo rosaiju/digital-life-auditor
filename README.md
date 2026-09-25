@@ -7,8 +7,10 @@ A mobile app that connects to your bank through Plaid, automatically detects rec
 - **Subscription scanner**: finds subscriptions in real transaction data (weekly to annual), handles price changes, refunds and merchant-name noise, and ignores bank fees, transfers and loan payments.
 - **Actionable**: known services come with a category and a one-tap link to their cancellation page.
 - **AI insights**: a language model (Groq) writes the summary and savings tips. Totals and the category breakdown are always computed in code, and a rule-based analysis takes over if the model is unavailable.
-- **Automatic sync**: an Airflow DAG refreshes every connected bank daily.
-- **Safe by default**: Plaid access tokens are encrypted at rest, passwords are bcrypt-hashed, every query is scoped to the signed-in user.
+- **Stays current**: an Airflow DAG refreshes every connected bank daily, Plaid webhooks (optional) trigger a sync the moment new transactions arrive, and pull-to-refresh syncs on demand. A subscription whose charges stop is moved to "ended" and dropped from your monthly total, and comes back automatically if the charges resume.
+- **Resilient to bank problems**: each bank syncs independently and records its own health. If a bank's login expires the app shows a Reconnect banner and re-opens Plaid Link in update mode instead of failing silently.
+- **Account control**: change password, delete your account (revokes bank access at Plaid and erases your data), disconnect any bank.
+- **Safe by default**: Plaid access tokens are encrypted at rest, passwords are bcrypt-hashed, auth endpoints are rate limited, webhooks must carry a valid Plaid signature, and every query is scoped to the signed-in user.
 
 ## Stack
 
@@ -29,9 +31,10 @@ A mobile app that connects to your bank through Plaid, automatically detects rec
  Expo app ──HTTPS/JWT──▶ FastAPI ──▶ PostgreSQL
     │                      │  ├──▶ Plaid  (link token, exchange, transactions/sync)
     │ Plaid Link (native)  │  └──▶ Groq   (insight narrative; rule-based fallback)
-    ▼                      ▲
-  Plaid                    │  POST /plaid/sync-all  (shared secret)
-                      Airflow DAG  ── daily at 02:00 UTC
+    ▼                      ▲  ▲
+  Plaid ──webhooks────────▶│  │  POST /plaid/webhook  (signed by Plaid, verified)
+                           │  │
+                      Airflow DAG ── daily at 02:00 UTC → POST /plaid/sync-all  (shared secret)
 ```
 
 ```
@@ -82,7 +85,9 @@ The backend applies database migrations automatically on start.
 docker compose exec backend python -m app.seed_demo
 ```
 
-This creates `demo@example.com` / `demo-password` with about 14 months of realistic transactions (Netflix, Spotify, a price increase, an annual Adobe charge, a refund, plus everyday spending). Sign in with it in the app to see detection, insights and cancel links working. Use `--reset` to recreate it.
+This creates `demo@example.com` / `demo-password` with about 14 months of realistic transactions (Netflix, Spotify, a price increase, an annual Adobe charge, a refund, a cancelled Peloton membership, plus everyday spending). Sign in with it in the app to see detection, insights and cancel links working; the cancelled subscription shows up in the "ended" note rather than the total. Use `--reset` to recreate it.
+
+**Suggested demo script (about 3 minutes, no bank needed):** sign in as the demo user, point out the monthly total and the price-increase subscription (Disney+), tap **Cancel** on one to open its cancellation page, dismiss one and restore it from Settings, then open **Insights** and tap **Generate**. To show the real bank flow, connect Tartan Bank (see below) on the Android build.
 
 ### 4. Run the app
 
@@ -116,6 +121,7 @@ Android notes (tested on an emulator):
 | `DATABASE_URL` | Postgres URL (docker compose overrides it) |
 | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | Plaid credentials; `sandbox`, `development` or `production` |
 | `PLAID_ANDROID_PACKAGE_NAME` | Optional. Set to `com.rosaiju.digitallifeauditor` once registered in the Plaid dashboard (needed for bank OAuth on Android) |
+| `PLAID_WEBHOOK_URL` | Optional. Public HTTPS URL of `POST /plaid/webhook`; see [Webhooks](#webhooks) |
 | `JWT_SECRET` | Signs login tokens. Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `TOKEN_ENCRYPTION_KEY` | Optional. Key for encrypting Plaid tokens at rest; defaults to one derived from `JWT_SECRET` |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Optional. Without a key, insights use the rule-based analysis |
@@ -144,14 +150,17 @@ With `PLAID_ENV` set to `development` or `production` the API refuses to start u
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/auth/register`, `/auth/login` | Create account / get a JWT |
+| POST | `/auth/register`, `/auth/login` | Create account / get a JWT (rate limited) |
 | GET | `/auth/me` | Current user |
+| POST | `/auth/change-password`, `/auth/delete-account` | Both re-check the password; deleting also revokes bank access at Plaid |
 | POST | `/plaid/link-token` | Start Plaid Link |
 | POST | `/plaid/exchange` | Exchange the public token, store the connection, run the first sync |
-| POST | `/plaid/sync` | Sync the user's connections now |
-| GET, DELETE | `/plaid/items`, `/plaid/items/{id}` | List / disconnect banks (revokes the token at Plaid) |
+| POST | `/plaid/sync` | Sync the user's banks now; one failing bank does not stop the others |
+| GET, DELETE | `/plaid/items`, `/plaid/items/{id}` | List banks with health (`ok` / `login_required` / `error`, last synced) / disconnect (revokes the token at Plaid) |
+| POST | `/plaid/items/{id}/link-token`, `/plaid/items/{id}/reconnected` | Reconnect a bank whose login expired (Link update mode), then re-sync |
+| POST | `/plaid/webhook` | Plaid only; the `Plaid-Verification` signature is checked |
 | POST | `/plaid/sync-all` | Airflow only, protected by a shared secret |
-| GET | `/subscriptions?status=active\|dismissed\|all` | Detected subscriptions, most expensive first |
+| GET | `/subscriptions?status=active\|dismissed\|ended\|all` | Detected subscriptions, most expensive first |
 | PATCH | `/subscriptions/{id}/dismiss`, `/restore` | Hide / unhide |
 | GET, POST | `/insights`, `/insights/generate` | Latest / new insights |
 | GET | `/health` | Liveness plus a database check |
@@ -162,7 +171,7 @@ With `PLAID_ENV` set to `development` or `production` the API refuses to start u
 cd backend
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
-pytest                                                   # 100+ tests; SQLite, Plaid and Groq are mocked
+pytest                                                   # 150+ tests; SQLite, Plaid and Groq are mocked
 
 alembic revision --autogenerate -m "describe change"    # after editing models
 alembic upgrade head
@@ -171,9 +180,22 @@ alembic upgrade head
 ```bash
 cd mobile
 npm run typecheck
+npm test                                                 # 80+ tests: store, API client, every screen (Jest + Testing Library)
 ```
 
-CI (GitHub Actions) runs the backend tests on Python 3.11, applies and checks the migrations against real Postgres, typechecks the app and bundles it for web and Android, and smoke-tests `docker compose`.
+CI (GitHub Actions) runs the backend tests on Python 3.11, applies and checks the migrations against real Postgres, typechecks and unit-tests the app and bundles it for web and Android, and smoke-tests `docker compose`.
+
+What the automated tests do **not** cover: the native Plaid Link screen itself (the tests mock the SDK; it was driven by hand on an Android emulator), real bank data beyond the Plaid sandbox, and iOS.
+
+## Webhooks
+
+Without webhooks the app still works: transactions refresh daily (Airflow), on pull-to-refresh and via **Settings, Sync Transactions Now**. Webhooks make it near real-time and let Plaid tell the app when a bank needs a new login.
+
+1. Expose the backend over HTTPS, e.g. `ngrok http 8000`.
+2. Set `PLAID_WEBHOOK_URL=https://<your-host>/plaid/webhook` in `backend/.env` and restart. New link tokens now carry the URL (banks connected earlier need to be reconnected once, or use Plaid's `/item/webhook/update`).
+3. In the sandbox you can fire one on demand with Plaid's `/sandbox/item/fire_webhook`.
+
+Every request must carry a valid `Plaid-Verification` JWT (ES256, fresh, body hash matches, key not expired), otherwise it gets a 401. `SYNC_UPDATES_AVAILABLE` triggers a background sync; `ITEM_LOGIN_REQUIRED`, `PENDING_EXPIRATION` and `USER_PERMISSION_REVOKED` flag the bank for reconnection. The signature check is covered by tests using a locally generated key; delivery from real Plaid has not been exercised.
 
 ## Bank OAuth on Android
 
@@ -192,4 +214,4 @@ Until then, Plaid rejects the link token (`INVALID_FIELD: Android package name m
 
 ## Security notes and limits
 
-Built and tested against the **Plaid sandbox**. Before handling real accounts you would want: HTTPS in front of the API, a managed secret store and key rotation, Plaid webhooks (instead of only polling) for real-time updates, a shared rate limiter if you run several API replicas (the built-in one is per process), and Plaid production approval. Auth endpoints are rate limited, and non-sandbox environments refuse to start with placeholder secrets or wildcard CORS. Insight generation sends only merchant names, amounts and categories to the language model, never bank credentials or account numbers.
+Built and tested against the **Plaid sandbox**. Before handling real accounts you would want: HTTPS in front of the API, a managed secret store and key rotation, a shared rate limiter if you run several API replicas (the built-in one is per process), server-side token revocation (JWTs are stateless and last 7 days, so a stolen token stays valid until it expires even after a password change), and Plaid production approval. Auth endpoints are rate limited, and non-sandbox environments refuse to start with placeholder secrets or wildcard CORS. Insight generation sends only merchant names, amounts and categories to the language model, never bank credentials or account numbers.
