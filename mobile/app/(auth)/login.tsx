@@ -11,7 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { Link } from "expo-router";
-import { authApi } from "@/services/api";
+import { authApi, showAlert } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 
 export default function Login() {
@@ -22,7 +22,7 @@ export default function Login() {
 
   async function handleLogin() {
     if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
+      showAlert("Error", "Please enter email and password");
       return;
     }
     setLoading(true);
@@ -30,7 +30,7 @@ export default function Login() {
       const res = await authApi.login(email, password);
       await setToken(res.data.access_token);
     } catch (e: any) {
-      Alert.alert("Login failed", e?.response?.data?.detail ?? "Unknown error");
+      showAlert("Login failed", e?.response?.data?.detail ?? "Unknown error");
     } finally {
       setLoading(false);
     }

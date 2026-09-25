@@ -1,7 +1,21 @@
 import axios from "axios";
+import { Platform, Alert } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+
+const getToken = () =>
+  Platform.OS === "web"
+    ? Promise.resolve(localStorage.getItem("access_token"))
+    : SecureStore.getItemAsync("access_token");
+
+export const showAlert = (title: string, message: string) => {
+  if (Platform.OS === "web") {
+    window.alert(`${title}: ${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+};
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -10,7 +24,7 @@ export const api = axios.create({
 
 // Attach JWT to every request
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync("access_token");
+  const token = await getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

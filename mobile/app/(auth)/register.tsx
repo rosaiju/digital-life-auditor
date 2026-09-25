@@ -11,7 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { Link } from "expo-router";
-import { authApi } from "@/services/api";
+import { authApi, showAlert } from "@/services/api";
 import { useAuthStore } from "@/store/auth";
 
 export default function Register() {
@@ -22,11 +22,11 @@ export default function Register() {
 
   async function handleRegister() {
     if (!email || !password) {
-      Alert.alert("Error", "Please fill in all fields");
+      showAlert("Error", "Please fill in all fields");
       return;
     }
     if (password.length < 8) {
-      Alert.alert("Error", "Password must be at least 8 characters");
+      showAlert("Error", "Password must be at least 8 characters");
       return;
     }
     setLoading(true);
@@ -34,7 +34,8 @@ export default function Register() {
       const res = await authApi.register(email, password);
       await setToken(res.data.access_token);
     } catch (e: any) {
-      Alert.alert("Registration failed", e?.response?.data?.detail ?? "Unknown error");
+      console.error("Register error:", JSON.stringify(e?.response?.data), e?.message, e?.code);
+      showAlert("Registration failed", e?.response?.data?.detail ?? e?.message ?? "Unknown error");
     } finally {
       setLoading(false);
     }
