@@ -11,10 +11,13 @@ import time
 from jose import JWTError, jwt
 
 from app.services import plaid_service
+from app.services.plaid_service import PlaidError
 
 MAX_AGE_SECONDS = 5 * 60
+# Plaid rotates signing keys and marks old ones expired, so a cached copy must not live forever.
+KEY_CACHE_SECONDS = 60 * 60
 
-_key_cache: dict[str, dict] = {}
+_key_cache: dict[str, tuple[float, dict]] = {}
 
 
 class WebhookVerificationError(Exception):
@@ -22,10 +25,16 @@ class WebhookVerificationError(Exception):
 
 
 def _get_key(key_id: str) -> dict:
-    key = _key_cache.get(key_id)
-    if key is None:
+    cached = _key_cache.get(key_id)
+    if cached and time.monotonic() - cached[0] < KEY_CACHE_SECONDS:
+        return cached[1]
+    try:
         key = plaid_service.get_webhook_verification_key(key_id)
-        _key_cache[key_id] = key
+    except PlaidError as exc:
+        if exc.code == "INVALID_WEBHOOK_VERIFICATION_KEY_ID":  # the caller made the id up: not our outage
+            raise WebhookVerificationError("unknown signing key") from exc
+        raise
+    _key_cache[key_id] = (time.monotonic(), key)
     return key
 
 

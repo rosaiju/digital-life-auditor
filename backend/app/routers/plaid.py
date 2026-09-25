@@ -216,6 +216,7 @@ def sync_all(
 # ITEM webhook codes after which the user has to re-authenticate with their bank.
 _REAUTH_CODES = {"PENDING_EXPIRATION", "USER_PERMISSION_REVOKED"}
 _REAUTH_ERRORS = {"ITEM_LOGIN_REQUIRED"}
+MAX_WEBHOOK_BYTES = 64 * 1024  # real Plaid webhooks are a few hundred bytes
 _SYNC_CODES = {"SYNC_UPDATES_AVAILABLE", "DEFAULT_UPDATE", "INITIAL_UPDATE", "HISTORICAL_UPDATE"}
 
 
@@ -260,7 +261,11 @@ async def plaid_webhook(
 
     Heavy work runs after the response because Plaid expects an answer within seconds.
     """
+    if int(request.headers.get("content-length") or 0) > MAX_WEBHOOK_BYTES:
+        raise HTTPException(status_code=413, detail="Payload too large")
     body = await request.body()
+    if len(body) > MAX_WEBHOOK_BYTES:  # no/incorrect Content-Length
+        raise HTTPException(status_code=413, detail="Payload too large")
     try:
         await run_in_threadpool(plaid_webhooks.verify, body, plaid_verification)
     except plaid_webhooks.WebhookVerificationError as exc:

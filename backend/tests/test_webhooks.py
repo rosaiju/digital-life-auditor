@@ -119,6 +119,36 @@ def test_key_lookup_failure_is_a_503_not_a_pass(client, signer, monkeypatch):
     assert post(client, signer, {"webhook_type": "TRANSACTIONS"}).status_code == 503
 
 
+def test_unknown_key_id_is_unauthorized_not_a_plaid_outage(client, signer, monkeypatch):
+    def unknown(kid):
+        raise PlaidError("invalid key_id provided", "INVALID_WEBHOOK_VERIFICATION_KEY_ID")
+
+    monkeypatch.setattr(plaid_service, "get_webhook_verification_key", unknown)
+    assert post(client, signer, {"webhook_type": "TRANSACTIONS"}).status_code == 401
+
+
+def test_oversized_webhook_bodies_are_rejected_before_any_work(client, signer, monkeypatch):
+    calls = []
+    monkeypatch.setattr(plaid_service, "get_webhook_verification_key", lambda kid: calls.append(kid) or dict(signer.jwk))
+    big = b'{"webhook_type": "TRANSACTIONS", "pad": "' + b"x" * 70_000 + b'"}'
+    assert post(client, signer, None, body=big).status_code == 413
+    assert calls == []
+
+
+def test_cached_keys_are_refetched_after_the_ttl(client, signer, monkeypatch):
+    calls = []
+    monkeypatch.setattr(plaid_service, "get_webhook_verification_key", lambda kid: calls.append(kid) or dict(signer.jwk))
+    plaid_webhooks._key_cache.clear()
+    clock = [1000.0]
+    monkeypatch.setattr(plaid_webhooks.time, "monotonic", lambda: clock[0])
+    post(client, signer, {"webhook_type": "X", "item_id": "nope"})
+    post(client, signer, {"webhook_type": "X", "item_id": "nope"})
+    assert len(calls) == 1
+    clock[0] += plaid_webhooks.KEY_CACHE_SECONDS + 1
+    post(client, signer, {"webhook_type": "X", "item_id": "nope"})
+    assert len(calls) == 2                       # a rotated / expired key would be noticed
+
+
 def test_verification_keys_are_cached(client, signer, monkeypatch):
     calls = []
     monkeypatch.setattr(plaid_service, "get_webhook_verification_key", lambda kid: calls.append(kid) or dict(signer.jwk))
@@ -192,3 +222,34 @@ def test_failing_background_sync_does_not_break_the_webhook(client, register, fa
 
 def test_malformed_but_correctly_signed_body_is_a_400(client, signer):
     assert post(client, signer, None, body=b"not json").status_code == 400
+
+
+def test_repeated_delivery_of_the_same_event_is_harmless(client, register, fake_plaid, db_session, signer, in_test_session):
+    from app.models.transaction import Transaction
+
+    headers, item = connected_item(client, register, fake_plaid, db_session)
+    before = db_session.query(Transaction).count()
+    payload = {"webhook_type": "TRANSACTIONS", "webhook_code": "SYNC_UPDATES_AVAILABLE", "item_id": item.item_id}
+
+    # Plaid retries deliveries; the fake returns the same transactions every time.
+    for _ in range(3):
+        assert post(client, signer, payload).json() == {"status": "accepted"}
+
+    assert db_session.query(Transaction).count() == before          # no duplicates
+    assert [s["merchant_name"] for s in client.get("/subscriptions", headers=headers).json()] == ["netflix"]
+    assert client.get("/plaid/items", headers=headers).json()[0]["status"] == "ok"
+
+
+def test_webhook_for_an_item_whose_owner_deleted_their_account_is_ignored(client, register, fake_plaid, db_session, signer, in_test_session):
+    headers, item = connected_item(client, register, fake_plaid, db_session)
+    plaid_item_id = item.item_id
+    assert client.post("/auth/delete-account", json={"password": "correct-horse"}, headers=headers).status_code == 204
+    fake_plaid.cursors_seen.clear()
+
+    for payload in (
+        {"webhook_type": "TRANSACTIONS", "webhook_code": "SYNC_UPDATES_AVAILABLE", "item_id": plaid_item_id},
+        {"webhook_type": "ITEM", "webhook_code": "ERROR", "item_id": plaid_item_id, "error": {"error_code": "ITEM_LOGIN_REQUIRED"}},
+    ):
+        assert post(client, signer, payload).status_code == 200
+
+    assert fake_plaid.cursors_seen == []                            # nothing was synced
