@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Digital Life Auditor — Interactive Preview</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: radial-gradient(ellipse at top, #1e1b4b 0%, #0a0a14 60%);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  padding: 40px 20px;
+}
+.page-label { color: #475569; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 28px; }
+
+/* ── PHONE SHELL ── */
+.phone {
+  width: 390px;
+  height: 780px;
+  background: #0f172a;
+  border-radius: 50px;
+  box-shadow: 0 0 0 2px #334155, 0 0 0 14px #1e293b, 0 0 0 16px #334155, 0 50px 100px rgba(0,0,0,0.8);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Notch */
+.notch {
+  width: 126px; height: 36px;
+  background: #1e293b;
+  border-radius: 0 0 22px 22px;
+  margin: 0 auto;
+  position: relative; z-index: 20;
+  flex-shrink: 0;
+}
+
+/* Screen area */
+.screen-area {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Each screen is absolutely positioned, transitions via opacity+transform */
+.screen {
+  position: absolute;
+  inset: 0;
+  background: #0f172a;
+  overflow-y: auto;
+  opacity: 0;
+  transform: translateX(30px);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.screen.active {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: all;
+}
+.screen.slide-left {
+  transform: translateX(-30px);
+}
+
+/* ── TAB BAR ── */
+.tab-bar {
+  display: flex;
+  background: #0c1523;
+  border-top: 1px solid #1e293b;
+  padding: 10px 0 18px;
+  flex-shrink: 0;
+}
+.tab {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; gap: 4px; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.tab:hover { opacity: 0.8; }
+.tab svg { width: 24px; height: 24px; }
+.tab-label { font-size: 10px; }
+.tab.active .tab-label, .tab.active svg { color: #6366f1; }
+.tab:not(.active) .tab-label, .tab:not(.active) svg { color: #475569; }
+
+/* ── SCROLLBAR ── */
+.screen::-webkit-scrollbar { width: 4px; }
+.screen::-webkit-scrollbar-track { background: transparent; }
+.screen::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+/* ══════════════════════════════
+   LOGIN SCREEN
+══════════════════════════════ */
+.login-inner {
+  padding: 80px 28px 40px;
+  display: flex; flex-direction: column;
+  min-height: 100%;
+  justify-content: center;
+}
+.logo { font-size: 28px; font-weight: 700; color: #f8fafc; margin-bottom: 6px; }
+.tagline { font-size: 14px; color: #94a3b8; margin-bottom: 44px; }
+.input {
+  background: #1e293b; border-radius: 12px; padding: 16px;
+  color: #64748b; font-size: 15px; margin-bottom: 14px;
+  border: 1px solid #334155; width: 100%; display: block;
+}
+.btn {
+  background: #6366f1; border-radius: 12px; padding: 16px;
+  color: #fff; font-weight: 600; font-size: 16px;
+  text-align: center; margin-top: 6px; cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  border: none; width: 100%;
+}
+.btn:hover { background: #4f46e5; }
+.btn:active { transform: scale(0.98); }
+.btn-ghost {
+  background: transparent; border: 1px solid #334155; color: #94a3b8;
+}
+.btn-ghost:hover { background: #1e293b; }
+.link-row { text-align: center; margin-top: 24px; color: #64748b; font-size: 14px; }
+.link { color: #6366f1; font-weight: 600; cursor: pointer; }
+.link:hover { text-decoration: underline; }
+
+/* ══════════════════════════════
+   DASHBOARD SCREEN
+══════════════════════════════ */
+.dash-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 20px 8px;
+}
+.screen-title { font-size: 24px; font-weight: 700; color: #f8fafc; }
+.chip {
+  background: #1e293b; border: 1px solid #334155; border-radius: 20px;
+  padding: 7px 14px; color: #6366f1; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+}
+.chip:hover { background: #273449; }
+
+.summary-card {
+  background: #1e293b; border-radius: 18px; padding: 22px;
+  margin: 8px 16px 16px; border: 1px solid #334155;
+}
+.s-label { color: #64748b; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; }
+.s-total { color: #f8fafc; font-size: 40px; font-weight: 700; margin: 4px 0 18px; line-height: 1; }
+.s-row { display: flex; align-items: center; }
+.s-stat { flex: 1; text-align: center; }
+.s-val { color: #f8fafc; font-size: 15px; font-weight: 600; }
+.s-lbl { color: #64748b; font-size: 10px; margin-top: 2px; }
+.divider { width: 1px; height: 28px; background: #334155; }
+
+.sub-list { padding: 0 16px 16px; }
+.sub-card {
+  display: flex; background: #1e293b; border-radius: 14px;
+  margin-bottom: 10px; overflow: hidden; border: 1px solid #334155;
+  transition: transform 0.15s;
+}
+.sub-card:hover { transform: translateX(2px); }
+.accent { width: 4px; flex-shrink: 0; }
+.sub-body { flex: 1; padding: 14px; }
+.sub-top { display: flex; align-items: flex-start; margin-bottom: 8px; }
+.sub-meta { flex: 1; }
+.sub-name { color: #f8fafc; font-size: 15px; font-weight: 600; }
+.sub-cat { font-size: 11px; font-weight: 500; margin-top: 2px; }
+.price-block { display: flex; align-items: baseline; gap: 2px; }
+.price { color: #f8fafc; font-size: 17px; font-weight: 700; }
+.freq { color: #64748b; font-size: 12px; }
+.sub-bot { display: flex; align-items: center; gap: 8px; }
+.next-date { color: #64748b; font-size: 11px; }
+.monthly { flex: 1; color: #94a3b8; font-size: 11px; }
+.dismiss-btn {
+  width: 24px; height: 24px; border-radius: 12px; background: #0f172a;
+  display: flex; align-items: center; justify-content: center;
+  color: #475569; font-size: 13px; cursor: pointer;
+  transition: background 0.15s;
+}
+.dismiss-btn:hover { background: #1e293b; color: #94a3b8; }
+
+/* ══════════════════════════════
+   AI INSIGHTS SCREEN
+══════════════════════════════ */
+.insights-inner { padding: 0 16px 32px; }
+.ins-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 0 16px;
+}
+.gen-btn {
+  background: #6366f1; border-radius: 20px; padding: 8px 16px;
+  color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+  border: none; transition: background 0.15s;
+}
+.gen-btn:hover { background: #4f46e5; }
+.gen-btn.loading { background: #4338ca; opacity: 0.7; }
+
+.summary-box {
+  background: #1e293b; border-radius: 14px; padding: 16px;
+  margin-bottom: 16px; border: 1px solid #334155;
+  color: #cbd5e1; font-size: 14px; line-height: 22px;
+}
+.stats3 { display: flex; gap: 10px; margin-bottom: 16px; }
+.sbox {
+  flex: 1; background: #1e293b; border-radius: 12px; padding: 14px;
+  text-align: center; border: 1px solid #334155;
+}
+.sbox-val { color: #f8fafc; font-size: 19px; font-weight: 700; }
+.sbox-lbl { color: #64748b; font-size: 10px; margin-top: 2px; }
+
+.opp-card {
+  background: #1e1d52; border-radius: 14px; padding: 16px;
+  margin-bottom: 16px; border: 1px solid #4338ca55;
+}
+.opp-lbl { color: #a5b4fc; font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px; }
+.opp-text { color: #e0e7ff; font-size: 13px; line-height: 20px; }
+
+.ins-card { border-radius: 14px; padding: 14px; margin-bottom: 10px; border: 1px solid; }
+.ins-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ins-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+.ins-title { flex: 1; font-weight: 600; font-size: 14px; }
+.save-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: #052e16; color: #22c55e; white-space: nowrap; }
+.ins-detail { color: #94a3b8; font-size: 13px; line-height: 20px; }
+
+.cat-box { background: #1e293b; border-radius: 14px; padding: 16px; margin-bottom: 16px; border: 1px solid #334155; }
+.cat-ttl { color: #64748b; font-size: 11px; font-weight: 600; letter-spacing: 1px; margin-bottom: 12px; }
+.cat-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #0f172a; align-items: center; }
+.cat-row:last-child { border: none; }
+.cat-name { color: #cbd5e1; font-size: 14px; }
+.cat-bar-wrap { flex: 1; margin: 0 12px; height: 4px; background: #0f172a; border-radius: 2px; }
+.cat-bar { height: 4px; border-radius: 2px; background: #6366f1; }
+.cat-amt { color: #94a3b8; font-size: 13px; }
+
+/* ══════════════════════════════
+   SETTINGS SCREEN
+══════════════════════════════ */
+.settings-inner { padding: 20px 20px 32px; }
+.settings-section { margin-bottom: 28px; }
+.section-lbl { color: #475569; font-size: 11px; font-weight: 600; letter-spacing: 1px; margin-bottom: 10px; }
+.settings-row {
+  display: flex; align-items: center; background: #1e293b;
+  border-radius: 12px; padding: 14px; margin-bottom: 8px;
+  border: 1px solid #334155; gap: 12px; cursor: pointer;
+  transition: background 0.15s;
+}
+.settings-row:hover { background: #273449; }
+.row-icon { font-size: 18px; width: 24px; text-align: center; }
+.row-text { flex: 1; color: #f8fafc; font-size: 15px; }
+.row-value { color: #64748b; font-size: 14px; }
+.chevron { color: #475569; font-size: 14px; }
+.logout-row {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: #1c0808; border-radius: 12px; padding: 14px;
+  border: 1px solid #450a0a; cursor: pointer; transition: background 0.15s;
+}
+.logout-row:hover { background: #250a0a; }
+.logout-text { color: #ef4444; font-weight: 600; font-size: 15px; }
+
+/* ══════════════════════════════
+   CONNECT BANK SCREEN
+══════════════════════════════ */
+.connect-inner { padding: 16px 24px 32px; }
+.back-btn {
+  color: #94a3b8; font-size: 22px; cursor: pointer; margin-bottom: 24px;
+  display: inline-block; transition: color 0.15s;
+}
+.back-btn:hover { color: #f8fafc; }
+.connect-title { font-size: 26px; font-weight: 700; color: #f8fafc; margin-bottom: 10px; }
+.connect-sub { color: #94a3b8; font-size: 14px; line-height: 22px; margin-bottom: 32px; }
+.feature-list { margin-bottom: 40px; display: flex; flex-direction: column; gap: 12px; }
+.feature-row { display: flex; align-items: center; gap: 10px; }
+.check { color: #22c55e; font-size: 18px; }
+.feature-text { color: #cbd5e1; font-size: 14px; }
+.sandbox-note { color: #334155; font-size: 12px; text-align: center; margin-top: 16px; }
+
+/* ══════════════════════════════
+   LOADING PULSE
+══════════════════════════════ */
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.pulse { animation: pulse 1.5s infinite; }
+
+/* nav hint */
+.nav-hint { color: #334155; font-size: 12px; margin-top: 20px; letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+
+<div class="page-label">Digital Life Auditor — Interactive Preview</div>
+
+<div class="phone">
+  <div class="notch"></div>
+
+  <div class="screen-area">
+
+    <!-- ── LOGIN ── -->
+    <div class="screen active" id="screen-login">
+      <div class="login-inner">
+        <div class="logo">Digital Life Auditor</div>
+        <div class="tagline">Know what you're paying for.</div>
+        <div class="input">Email</div>
+        <div class="input">Password</div>
+        <button class="btn" onclick="goTo('dashboard')">Sign In</button>
+        <div style="margin-top:12px">
+          <button class="btn btn-ghost" onclick="goTo('register')">Create Account</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── REGISTER ── -->
+    <div class="screen" id="screen-register">
+      <div class="login-inner">
+        <div class="logo">Create Account</div>
+        <div class="tagline">Start tracking your subscriptions.</div>
+        <div class="input">Email</div>
+        <div class="input">Password (min 8 chars)</div>
+        <button class="btn" onclick="goTo('dashboard')">Create Account</button>
+        <div class="link-row">Already have an account? <span class="link" onclick="goTo('login')">Sign in</span></div>
+      </div>
+    </div>
+
+    <!-- ── DASHBOARD ── -->
+    <div class="screen" id="screen-dashboard">
+      <div class="dash-header">
+        <div class="screen-title">Subscriptions</div>
+        <div class="chip" onclick="goTo('connect')">+ Bank</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="s-label">MONTHLY SPEND</div>
+        <div class="s-total">$127.94</div>
+        <div class="s-row">
+          <div class="s-stat"><div class="s-val">8</div><div class="s-lbl">Subscriptions</div></div>
+          <div class="divider"></div>
+          <div class="s-stat"><div class="s-val">$1,535</div><div class="s-lbl">Per Year</div></div>
+          <div class="divider"></div>
+          <div class="s-stat"><div class="s-val">$15.99</div><div class="s-lbl">Avg / Sub</div></div>
+        </div>
+      </div>
+
+      <div class="sub-list">
+        <div class="sub-card">
+          <div class="accent" style="background:#0284c7"></div>
+          <div class="sub-body">
+            <div class="sub-top">
+              <div class="sub-meta">
+                <div class="sub-name">Adobe Creative Cloud</div>
+                <div class="sub-cat" style="color:#0284c7">Productivity</div>
+              </div>
+              <div class="price-block"><span class="price">$54.99</span><span class="freq">/mo</span></div>
+            </div>
+            <div class="sub-bot">
+              <div class="next-date">📅 Next: Oct 1</div>
+              <div class="monthly">$54.99/mo</div>
+              <div class="dismiss-btn" onclick="dismissCard(this)">✕</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-card">
+          <div class="accent" style="background:#7c3aed"></div>
+          <div class="sub-body">
+            <div class="sub-top">
+              <div class="sub-meta">
+                <div class="sub-name">Netflix</div>
+                <div class="sub-cat" style="color:#7c3aed">Entertainment</div>
+              </div>
+              <div class="price-block"><span class="price">$22.99</span><span class="freq">/mo</span></div>
+            </div>
+            <div class="sub-bot">
+              <div class="next-date">📅 Next: Sep 14</div>
+              <div class="monthly">$22.99/mo</div>
+              <div class="dismiss-btn" onclick="dismissCard(this)">✕</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-card">
+          <div class="accent" style="background:#6366f1"></div>
+          <div class="sub-body">
+            <div class="sub-top">
+              <div class="sub-meta">
+                <div class="sub-name">ChatGPT Plus</div>
+                <div class="sub-cat" style="color:#6366f1">AI Tools</div>
+              </div>
+              <div class="price-block"><span class="price">$20.00</span><span class="freq">/mo</span></div>
+            </div>
+            <div class="sub-bot">
+              <div class="next-date">📅 Next: Sep 18</div>
+              <div class="monthly">$20.00/mo</div>
+              <div class="dismiss-btn" onclick="dismissCard(this)">✕</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-card">
+          <div class="accent" style="background:#7c3aed"></div>
+          <div class="sub-body">
+            <div class="sub-top">
+              <div class="sub-meta">
+                <div class="sub-name">Spotify</div>
+                <div class="sub-cat" style="color:#7c3aed">Entertainment</div>
+              </div>
+              <div class="price-block"><span class="price">$11.99</span><span class="freq">/mo</span></div>
+            </div>
+            <div class="sub-bot">
+              <div class="next-date">📅 Next: Sep 22</div>
+              <div class="monthly">$11.99/mo</div>
+              <div class="dismiss-btn" onclick="dismissCard(this)">✕</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-card">
+          <div class="accent" style="background:#7c3aed"></div>
+          <div class="sub-body">
+            <div class="sub-top">
+              <div class="sub-meta">
+                <div class="sub-name">Disney+</div>
+                <div class="sub-cat" style="color:#7c3aed">Entertainment</div>
+              </div>
+              <div class="price-block"><span class="price">$7.99</span><span class="freq">/mo</span></div>
+            </div>
+            <div class="sub-bot">
+              <div class="next-date">📅 Next: Oct 5</div>
+              <div class="monthly">$7.99/mo</div>
+              <div class="dismiss-btn" onclick="dismissCard(this)">✕</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-card">
+          <div class="accent" style="background:#059669"></div>
+          <div class="sub-body">
+            <div class="sub-top">
+              <div class="sub-meta">
+                <div class="sub-name">Headspace</div>
+                <div class="sub-cat" style="color:#059669">Health & Wellness</div>
+              </div>
+              <div class="price-block"><span class="price">$9.99</span><span class="freq">/mo</span></div>
+            </div>
+            <div class="sub-bot">
+              <div class="next-date">📅 Next: Sep 28</div>
+              <div class="monthly">$9.99/mo</div>
+              <div class="dismiss-btn" onclick="dismissCard(this)">✕</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AI INSIGHTS ── -->
+    <div class="screen" id="screen-insights">
+      <div class="insights-inner">
+        <div class="ins-header">
+          <div class="screen-title">AI Insights</div>
+          <button class="gen-btn" id="gen-btn" onclick="simulateGenerate()">✦ Generate</button>
+        </div>
+
+        <div class="summary-box">
+          You're spending <strong style="color:#f8fafc">$127.94/month</strong> across 8 subscriptions — that's <strong style="color:#f8fafc">$1,535/year</strong>. You have 3 entertainment services with significant overlap.
+        </div>
+
+        <div class="stats3">
+          <div class="sbox"><div class="sbox-val">$127.94</div><div class="sbox-lbl">Per Month</div></div>
+          <div class="sbox"><div class="sbox-val">$1,535</div><div class="sbox-lbl">Per Year</div></div>
+          <div class="sbox"><div class="sbox-val">8</div><div class="sbox-lbl">Active</div></div>
+        </div>
+
+        <div class="opp-card">
+          <div class="opp-lbl">TOP OPPORTUNITY</div>
+          <div class="opp-text">Cancel Disney+ and Hulu — Netflix alone covers 90% of what you watch. Save $16/month instantly.</div>
+        </div>
+
+        <div class="ins-card" style="background:#1c1408; border-color:#f59e0b55">
+          <div class="ins-row">
+            <div class="ins-icon" style="background:#f59e0b22">⚠️</div>
+            <div class="ins-title" style="color:#f59e0b">3 streaming services</div>
+            <div class="save-badge">Save $16/mo</div>
+          </div>
+          <div class="ins-detail">Netflix ($22.99), Disney+ ($7.99), and Hulu ($7.99) heavily overlap. Consider keeping just Netflix.</div>
+        </div>
+
+        <div class="ins-card" style="background:#051a0d; border-color:#22c55e55">
+          <div class="ins-row">
+            <div class="ins-icon" style="background:#22c55e22">📉</div>
+            <div class="ins-title" style="color:#22c55e">Switch Adobe to annual</div>
+            <div class="save-badge">Save $18/mo</div>
+          </div>
+          <div class="ins-detail">Monthly plan costs $54.99. Annual plan = $36.99/mo billed yearly. Saves $216/year with no loss of features.</div>
+        </div>
+
+        <div class="ins-card" style="background:#0d0d1c; border-color:#6366f155">
+          <div class="ins-row">
+            <div class="ins-icon" style="background:#6366f122">💡</div>
+            <div class="ins-title" style="color:#6366f1">Duplicate AI tools</div>
+            <div class="save-badge">Save $20/mo</div>
+          </div>
+          <div class="ins-detail">ChatGPT Plus ($20) and Claude Pro ($20) offer similar capabilities. Pick one and cancel the other.</div>
+        </div>
+
+        <div class="cat-box">
+          <div class="cat-ttl">BY CATEGORY</div>
+          <div class="cat-row">
+            <div class="cat-name">Productivity</div>
+            <div class="cat-bar-wrap"><div class="cat-bar" style="width:100%"></div></div>
+            <div class="cat-amt">$54.99</div>
+          </div>
+          <div class="cat-row">
+            <div class="cat-name">Entertainment</div>
+            <div class="cat-bar-wrap"><div class="cat-bar" style="width:78%"></div></div>
+            <div class="cat-amt">$42.97</div>
+          </div>
+          <div class="cat-row">
+            <div class="cat-name">AI Tools</div>
+            <div class="cat-bar-wrap"><div class="cat-bar" style="width:36%"></div></div>
+            <div class="cat-amt">$20.00</div>
+          </div>
+          <div class="cat-row">
+            <div class="cat-name">Health & Wellness</div>
+            <div class="cat-bar-wrap"><div class="cat-bar" style="width:18%"></div></div>
+            <div class="cat-amt">$9.99</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div class="screen" id="screen-settings">
+      <div class="settings-inner">
+        <div class="screen-title" style="margin-bottom:28px; margin-top:4px">Settings</div>
+
+        <div class="settings-section">
+          <div class="section-lbl">ACCOUNTS</div>
+          <div class="settings-row" onclick="goTo('connect')">
+            <div class="row-icon">🔗</div>
+            <div class="row-text">Connect Bank Account</div>
+            <div class="chevron">›</div>
+          </div>
+          <div class="settings-row" onclick="showToast('Syncing transactions…')">
+            <div class="row-icon">🔄</div>
+            <div class="row-text">Sync Transactions Now</div>
+            <div class="chevron">›</div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="section-lbl">APP</div>
+          <div class="settings-row">
+            <div class="row-icon">ℹ️</div>
+            <div class="row-text">Version</div>
+            <div class="row-value">1.0.0</div>
+          </div>
+          <div class="settings-row">
+            <div class="row-icon">🛡️</div>
+            <div class="row-text">Privacy Policy</div>
+            <div class="chevron">›</div>
+          </div>
+        </div>
+
+        <div class="logout-row" onclick="goTo('login')">
+          <span style="color:#ef4444; font-size:18px">↪</span>
+          <span class="logout-text">Sign Out</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CONNECT BANK ── -->
+    <div class="screen" id="screen-connect">
+      <div class="connect-inner">
+        <div class="back-btn" onclick="goBack()">←</div>
+        <div class="connect-title">Connect Your Bank</div>
+        <div class="connect-sub">We use Plaid to securely read your transaction history. We never store your credentials and can't move money.</div>
+        <div class="feature-list">
+          <div class="feature-row"><span class="check">✓</span><span class="feature-text">Bank-level 256-bit encryption</span></div>
+          <div class="feature-row"><span class="check">✓</span><span class="feature-text">Read-only — we can't move money</span></div>
+          <div class="feature-row"><span class="check">✓</span><span class="feature-text">Powered by Plaid, used by 8,000+ apps</span></div>
+          <div class="feature-row"><span class="check">✓</span><span class="feature-text">Disconnect any time in Settings</span></div>
+        </div>
+        <button class="btn" onclick="simulatePlaid()">Connect a Bank Account</button>
+        <div class="sandbox-note">Sandbox mode: Chase → user_good / pass_good</div>
+      </div>
+    </div>
+
+  </div><!-- end screen-area -->
+
+  <!-- Tab bar (hidden on auth screens) -->
+  <div class="tab-bar" id="tab-bar" style="display:none">
+    <div class="tab active" id="tab-dashboard" onclick="switchTab('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+      <div class="tab-label">Subscriptions</div>
+    </div>
+    <div class="tab" id="tab-insights" onclick="switchTab('insights')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
+      <div class="tab-label">AI Insights</div>
+    </div>
+    <div class="tab" id="tab-settings" onclick="switchTab('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <div class="tab-label">Settings</div>
+    </div>
+  </div>
+
+</div><!-- end phone -->
+
+<div class="nav-hint">Click tabs to navigate • ✕ to dismiss subscriptions • ← to go back</div>
+
+<!-- Toast -->
+<div id="toast" style="position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(20px);background:#1e293b;color:#f8fafc;padding:10px 20px;border-radius:20px;font-size:13px;border:1px solid #334155;opacity:0;transition:all 0.3s;pointer-events:none;z-index:999"></div>
+
+<script>
+const AUTH_SCREENS = ['login','register'];
+const TAB_SCREENS  = ['dashboard','insights','settings'];
+let history = ['login'];
+let current = 'login';
+
+function goTo(id) {
+  const prev = current;
+  const prevEl = document.getElementById('screen-' + prev);
+  const nextEl = document.getElementById('screen-' + id);
+
+  prevEl.classList.remove('active');
+  prevEl.classList.add('slide-left');
+  setTimeout(() => prevEl.classList.remove('slide-left'), 300);
+
+  nextEl.style.transform = 'translateX(30px)';
+  nextEl.classList.add('active');
+
+  // Tab bar visibility
+  const tabBar = document.getElementById('tab-bar');
+  if (TAB_SCREENS.includes(id)) {
+    tabBar.style.display = 'flex';
+    setActiveTab(id);
+  } else {
+    tabBar.style.display = 'none';
+  }
+
+  history.push(id);
+  current = id;
+
+  // Scroll to top
+  nextEl.scrollTop = 0;
+}
+
+function goBack() {
+  if (history.length > 1) {
+    history.pop();
+    const prev = history[history.length - 1];
+    goTo(prev);
+    history.pop(); // goTo will push again
+  }
+}
+
+function switchTab(id) {
+  if (current === id) return;
+  const prevEl = document.getElementById('screen-' + current);
+  prevEl.classList.remove('active');
+
+  const nextEl = document.getElementById('screen-' + id);
+  nextEl.style.transform = 'translateX(0)';
+  nextEl.classList.add('active');
+  nextEl.scrollTop = 0;
+
+  setActiveTab(id);
+  history.push(id);
+  current = id;
+}
+
+function setActiveTab(id) {
+  ['dashboard','insights','settings'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === id);
+  });
+}
+
+function dismissCard(btn) {
+  const card = btn.closest('.sub-card');
+  card.style.transition = 'all 0.25s ease';
+  card.style.opacity = '0';
+  card.style.maxHeight = card.offsetHeight + 'px';
+  setTimeout(() => { card.style.maxHeight = '0'; card.style.marginBottom = '0'; card.style.padding = '0'; }, 50);
+  setTimeout(() => card.remove(), 300);
+  showToast('Subscription dismissed');
+}
+
+function simulateGenerate() {
+  const btn = document.getElementById('gen-btn');
+  btn.classList.add('loading');
+  btn.textContent = '⟳ Analyzing…';
+  btn.classList.add('pulse');
+  showToast('GPT-4o is analyzing your subscriptions…');
+  setTimeout(() => {
+    btn.classList.remove('loading','pulse');
+    btn.textContent = '✦ Generate';
+    showToast('Insights updated!');
+  }, 2500);
+}
+
+function simulatePlaid() {
+  showToast('Opening Plaid Link…');
+  setTimeout(() => {
+    showToast('Bank connected! Scanning transactions…');
+    setTimeout(() => goTo('dashboard'), 1200);
+  }, 1500);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  t.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => {
+    t.style.opacity = '0';
+    t.style.transform = 'translateX(-50%) translateY(10px)';
+  }, 2000);
+}
+</script>
+</body>
+</html>
