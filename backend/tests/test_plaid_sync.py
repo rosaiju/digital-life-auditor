@@ -288,3 +288,31 @@ def test_exchange_rejects_empty_or_oversized_input(client, register, fake_plaid,
     assert post({"public_token": "pub", "institution_name": "y" * 201}) == 422
     assert post({}) == 422
     assert db_session.query(PlaidItem).count() == 0
+
+
+# ---------- error translation ----------
+
+def _api_exception(body):
+    import plaid
+
+    exc = plaid.ApiException(status=400, reason="Bad Request")
+    exc.body = body
+    return exc
+
+
+def test_known_plaid_error_codes_get_user_friendly_messages():
+    import json
+
+    raw = json.dumps({"error_code": "ITEM_LOGIN_REQUIRED", "error_message": "use Link's update mode ..."})
+    err = plaid_service._wrap(_api_exception(raw))
+    assert err.code == "ITEM_LOGIN_REQUIRED"
+    assert err.message == "Your bank needs you to sign in again"
+
+
+def test_unknown_plaid_errors_keep_plaids_message_and_bad_bodies_are_survivable():
+    import json
+
+    err = plaid_service._wrap(_api_exception(json.dumps({"error_code": "SOMETHING_NEW", "error_message": "details"})))
+    assert (err.code, err.message) == ("SOMETHING_NEW", "details")
+    for body in (None, "<html>bad gateway</html>", json.dumps(["not", "a", "dict"])):
+        assert plaid_service._wrap(_api_exception(body)).message == "Plaid request failed"

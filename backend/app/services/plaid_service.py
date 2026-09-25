@@ -42,11 +42,22 @@ def get_client() -> plaid_api.PlaidApi:
     return plaid_api.PlaidApi(plaid.ApiClient(configuration))
 
 
+# Plaid's own error_message for these is written for developers ("use Link's update mode ...").
+_FRIENDLY_MESSAGES = {
+    "ITEM_LOGIN_REQUIRED": "Your bank needs you to sign in again",
+    "INSTITUTION_DOWN": "The bank is temporarily unavailable, please try again later",
+    "INSTITUTION_NOT_RESPONDING": "The bank is not responding right now, please try again later",
+    "INSTITUTION_NO_LONGER_SUPPORTED": "This bank is no longer supported",
+    "RATE_LIMIT_EXCEEDED": "Too many requests to the bank, please wait a moment and try again",
+}
+
+
 def _wrap(exc: plaid.ApiException) -> PlaidError:
     try:
         body = json.loads(exc.body)
-        return PlaidError(body.get("error_message") or "Plaid request failed", body.get("error_code"))
-    except (TypeError, ValueError):
+        code = body.get("error_code")
+        return PlaidError(_FRIENDLY_MESSAGES.get(code) or body.get("error_message") or "Plaid request failed", code)
+    except (TypeError, ValueError, AttributeError):
         return PlaidError("Plaid request failed")
 
 
