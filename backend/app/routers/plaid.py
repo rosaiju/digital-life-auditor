@@ -5,7 +5,7 @@ from contextlib import contextmanager
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -21,8 +21,8 @@ router = APIRouter()
 
 
 class ExchangeRequest(BaseModel):
-    public_token: str
-    institution_name: str | None = None
+    public_token: str = Field(min_length=1, max_length=512)
+    institution_name: str | None = Field(default=None, max_length=200)
 
 
 def _plaid_failure(exc: PlaidError) -> HTTPException:

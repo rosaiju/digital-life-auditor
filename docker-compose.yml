@@ -15,7 +15,7 @@ services:
       POSTGRES_PASSWORD: dlapassword
       POSTGRES_MULTIPLE_DATABASES: digital_life_auditor,airflow
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"   # dev database: not exposed to the network
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh
@@ -61,7 +61,7 @@ services:
     environment:
       <<: *airflow-env
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"   # Airflow UI: local only
     volumes:
       - ./airflow/dags:/opt/airflow/dags
     depends_on:

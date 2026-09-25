@@ -276,3 +276,15 @@ def test_link_token_request_includes_android_package_only_when_configured(monkey
     monkeypatch.setattr(plaid_service.settings, "plaid_android_package_name", "com.example.app")
     assert plaid_service.create_link_token(1) == "link-sandbox-x"
     assert sent[-1].to_dict()["android_package_name"] == "com.example.app"
+
+
+# ---------- input validation ----------
+
+def test_exchange_rejects_empty_or_oversized_input(client, register, fake_plaid, db_session):
+    headers, _ = register()
+    post = lambda body: client.post("/plaid/exchange", json=body, headers=headers).status_code
+    assert post({"public_token": ""}) == 422
+    assert post({"public_token": "x" * 513}) == 422
+    assert post({"public_token": "pub", "institution_name": "y" * 201}) == 422
+    assert post({}) == 422
+    assert db_session.query(PlaidItem).count() == 0

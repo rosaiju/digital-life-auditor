@@ -7,6 +7,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Run as an unprivileged user.
+RUN useradd --system --no-create-home app && chown -R app /app
+USER app
+
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
