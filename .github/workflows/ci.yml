@@ -90,5 +90,13 @@ jobs:
       - name: Seed demo data and check detection
         run: |
           docker compose exec -T backend python -m app.seed_demo
+      # Proves the DAG parses in real Airflow and that the shared secret reaches the backend
+      # (a mismatch would make /plaid/sync-all answer 403 and fail the task).
+      - name: Run the Airflow DAG end to end
+        run: |
+          docker compose up -d --wait --wait-timeout 300 airflow-webserver
+          docker compose up -d airflow-scheduler
+          docker compose exec -T airflow-scheduler airflow dags list | grep sync_transactions
+          docker compose exec -T airflow-scheduler airflow dags test sync_transactions
       - if: failure()
         run: docker compose logs --no-color
