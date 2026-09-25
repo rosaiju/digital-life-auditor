@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from app.models.subscription import Subscription
 
@@ -12,8 +12,8 @@ def add_sub(db, user_id, name="netflix", amount=15.49, frequency="monthly", stat
         frequency=frequency,
         confidence=0.9,
         status=status,
-        last_charge_date=date(2026, 8, 1),
-        next_charge_date=date(2026, 9, 1),
+        last_charge_date=date.today() - timedelta(days=10),
+        next_charge_date=date.today() + timedelta(days=20),
     )
     db.add(sub)
     db.commit()

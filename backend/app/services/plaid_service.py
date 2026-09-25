@@ -11,6 +11,7 @@ from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
 from plaid.model.products import Products
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
+from plaid.model.webhook_verification_key_get_request import WebhookVerificationKeyGetRequest
 
 from app.config import settings
 
@@ -56,12 +57,19 @@ def _plain(obj: Any) -> Any:
     return json.loads(json.dumps(obj, default=str))
 
 
-def create_link_token(user_id: int) -> str:
-    options = {}
+def create_link_token(user_id: int, access_token: str | None = None) -> str:
+    """Create a Link token. With `access_token` it opens Link in update mode, which lets the
+    user re-authenticate an existing connection (Plaid forbids `products` in that mode)."""
+    options: dict[str, Any] = {}
     if settings.plaid_android_package_name:
         options["android_package_name"] = settings.plaid_android_package_name
+    if settings.plaid_webhook_url:
+        options["webhook"] = settings.plaid_webhook_url
+    if access_token:
+        options["access_token"] = access_token
+    else:
+        options["products"] = [Products("transactions")]
     request = LinkTokenCreateRequest(
-        products=[Products("transactions")],
         client_name="Digital Life Auditor",
         country_codes=[CountryCode("US")],
         language="en",
@@ -72,6 +80,15 @@ def create_link_token(user_id: int) -> str:
         return get_client().link_token_create(request)["link_token"]
     except plaid.ApiException as exc:
         raise _wrap(exc) from exc
+
+
+def get_webhook_verification_key(key_id: str) -> dict:
+    """Fetch the public JWK Plaid used to sign a webhook."""
+    try:
+        response = get_client().webhook_verification_key_get(WebhookVerificationKeyGetRequest(key_id=key_id))
+    except plaid.ApiException as exc:
+        raise _wrap(exc) from exc
+    return _plain(response["key"])
 
 
 def exchange_public_token(public_token: str) -> dict:

@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.routers.auth import get_current_user
+from app.services import sync
 
 router = APIRouter()
 
@@ -51,10 +52,11 @@ def _set_status(db: Session, user: User, subscription_id: int, status: str) -> S
 
 @router.get("", response_model=list[SubscriptionOut])
 def list_subscriptions(
-    status: Literal["active", "dismissed", "all"] = "active",
+    status: Literal["active", "dismissed", "ended", "all"] = "active",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    sync.expire_lapsed(db, current_user.id)  # charges may have stopped since the last sync
     query = db.query(Subscription).filter(Subscription.user_id == current_user.id)
     if status != "all":
         query = query.filter(Subscription.status == status)

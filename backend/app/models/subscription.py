@@ -22,7 +22,7 @@ class Subscription(Base):
     last_charge_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     next_charge_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
-    status: Mapped[str] = mapped_column(String, default="active")  # active|dismissed
+    status: Mapped[str] = mapped_column(String, default="active")  # active|dismissed|ended (charges stopped)
     cancel_url: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 

@@ -22,8 +22,10 @@ def plaid_txn(txn_id, merchant, amount, day, pending=False):
     }
 
 
-def monthly_history(merchant, amount, months=4, prefix=None):
-    start = date(2026, 5, 1)
+def monthly_history(merchant, amount, months=4, prefix=None, end=None):
+    """Monthly charges ending a few days ago, so the subscription is still current."""
+    end = end or date.today() - timedelta(days=3)
+    start = end - timedelta(days=30 * (months - 1))
     prefix = prefix or merchant.lower()
     return [plaid_txn(f"{prefix}-{i}", merchant, amount, start + timedelta(days=30 * i)) for i in range(months)]
 
@@ -39,7 +41,7 @@ def fake_plaid(monkeypatch):
         cursors_seen = []
         removed_tokens = []
 
-    def create_link_token(user_id):
+    def create_link_token(user_id, access_token=None):
         return f"link-sandbox-{user_id}"
 
     def exchange(public_token):
@@ -191,11 +193,12 @@ def test_dismissed_subscription_stays_dismissed_after_resync(client, register, f
 
 
 def test_resync_updates_price_of_existing_subscription(client, register, fake_plaid, db_session):
-    fake_plaid.sync_result["added"] = monthly_history("Netflix", 15.49, months=3)
+    history = monthly_history("Netflix", 15.49, months=3, end=date.today() - timedelta(days=33))
+    fake_plaid.sync_result["added"] = history
     headers, _ = register()
     connect(client, headers)
 
-    later = date(2026, 5, 1) + timedelta(days=30 * 3)
+    later = date.today() - timedelta(days=3)  # the fourth monthly charge
     fake_plaid.sync_result = {
         "added": [plaid_txn("netflix-3", "Netflix", 15.99, later)],
         "modified": [], "removed": [], "cursor": "cursor-2",

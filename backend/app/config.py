@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # package name. It must ALSO be registered in the Plaid dashboard (Developers > API >
     # Allowed Android package names) or Plaid rejects the link token with INVALID_FIELD.
     plaid_android_package_name: str = ""
+    # Public HTTPS URL of POST /plaid/webhook. Optional: without it Plaid never calls us and
+    # transactions are only refreshed by the daily sync and pull-to-refresh.
+    plaid_webhook_url: str = ""
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 10080  # 7 days
