@@ -4,7 +4,7 @@ import DeleteAccount from "@/app/delete-account";
 import { queryClient } from "@/services/queryClient";
 import { useAuthStore } from "@/store/auth";
 import { apiMock, apiError, resetApiMock } from "../test-utils/apiMock";
-import { alertSpy, renderScreen, resetApp, router } from "../test-utils/render";
+import { alertSpy, pressAlertButton, renderScreen, resetApp, router, settle } from "../test-utils/render";
 
 jest.mock("@/services/api", () => require("../test-utils/apiMock").apiMock);
 
@@ -75,12 +75,24 @@ describe("DeleteAccount", () => {
     expect(apiMock.authApi.deleteAccount).not.toHaveBeenCalled();
   });
 
-  it("deletes the account, then signs out and drops all cached data", async () => {
+  it("asks for a final confirmation before deleting anything", async () => {
+    apiMock.authApi.deleteAccount.mockResolvedValue({});
+    renderScreen(<DeleteAccount />);
+    type("Your password", "right-password");
+    fireEvent.press(screen.getByText("Delete my account"));
+
+    expect(alert).toHaveBeenCalledWith("Delete account?", expect.stringContaining("can't be undone"), expect.any(Array));
+    expect(apiMock.authApi.deleteAccount).not.toHaveBeenCalled();
+    await settle();
+  });
+
+  it("deletes the account after confirmation, then signs out and drops all cached data", async () => {
     apiMock.authApi.deleteAccount.mockResolvedValue({});
     queryClient.setQueryData(["subscriptions", "active"], [{ id: 1 }]);
     renderScreen(<DeleteAccount />);
     type("Your password", "right-password");
     fireEvent.press(screen.getByText("Delete my account"));
+    await pressAlertButton(alert, "Delete forever");
 
     await waitFor(() => expect(useAuthStore.getState().token).toBeNull());
     expect(apiMock.authApi.deleteAccount).toHaveBeenCalledWith("right-password");
@@ -92,6 +104,7 @@ describe("DeleteAccount", () => {
     renderScreen(<DeleteAccount />);
     type("Your password", "wrong");
     fireEvent.press(screen.getByText("Delete my account"));
+    await pressAlertButton(alert, "Delete forever");
 
     expect(await screen.findByText("Incorrect password")).toBeTruthy();
     expect(useAuthStore.getState().token).toBe("test-token");

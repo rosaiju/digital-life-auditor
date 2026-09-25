@@ -1,9 +1,14 @@
 import { ReactElement } from "react";
 import { Alert } from "react-native";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, notifyManager } from "@tanstack/react-query";
 import { act, render } from "@testing-library/react-native";
 import { queryClient } from "@/services/queryClient";
 import { useAuthStore } from "@/store/auth";
+
+// React Query notifies components from timers; deliver those updates inside act() like a real render would.
+notifyManager.setNotifyFunction((callback) => {
+  act(callback);
+});
 
 /** Fresh cache and a signed-in user, no retries so failures show up immediately. */
 export function resetApp({ signedIn = true } = {}) {
@@ -26,18 +31,20 @@ export function alertSpy() {
   return jest.spyOn(Alert, "alert").mockImplementation(() => {});
 }
 
-/** Press a button of the most recent Alert.alert(...) dialog by its label. */
-export function pressAlertButton(spy: jest.SpyInstance, label: string) {
+/** Press a button of the most recent Alert.alert(...) dialog by its label, and let its effects settle. */
+export async function pressAlertButton(spy: jest.SpyInstance, label: string) {
   const buttons = spy.mock.calls[spy.mock.calls.length - 1][2] as { text: string; onPress?: () => void }[];
   const button = buttons.find((b) => b.text === label);
   if (!button?.onPress) throw new Error(`No "${label}" button in the last alert`);
-  button.onPress();
+  await act(async () => {
+    button.onPress?.();
+  });
 }
 
-/** Let in-flight promises and queries finish inside act(), so late state updates don't warn. */
+/** Let in-flight promises, queries and FlatList's 50 ms render batching finish inside act(), so late state updates don't warn. */
 export const settle = () =>
   act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 60));
   });
 
 afterEach(settle);

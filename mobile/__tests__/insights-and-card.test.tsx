@@ -113,13 +113,13 @@ describe("SubscriptionCard", () => {
     );
     expect(screen.getByText("netflix")).toBeTruthy();
     expect(screen.queryByText(/Next:/)).toBeNull();
-    expect(screen.queryByText("Cancel")).toBeNull();
+    expect(screen.queryByText("Cancel plan")).toBeNull();
   });
 
   it("opens the cancellation page", () => {
     const open = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
     render(<SubscriptionCard subscription={subscription} onDismiss={() => {}} />);
-    fireEvent.press(screen.getByText("Cancel"));
+    fireEvent.press(screen.getByText("Cancel plan"));
     expect(open).toHaveBeenCalledWith("https://www.netflix.com/cancelplan");
     open.mockRestore();
   });
@@ -127,17 +127,17 @@ describe("SubscriptionCard", () => {
   it("tells the user when the cancellation page cannot be opened", async () => {
     const open = jest.spyOn(Linking, "openURL").mockRejectedValue(new Error("no browser"));
     render(<SubscriptionCard subscription={subscription} onDismiss={() => {}} />);
-    fireEvent.press(screen.getByText("Cancel"));
+    fireEvent.press(screen.getByText("Cancel plan"));
     await waitFor(() => expect(alert).toHaveBeenCalledWith("Couldn't open link", subscription.cancel_url));
     open.mockRestore();
   });
 
-  it("asks before dismissing", () => {
+  it("asks before dismissing", async () => {
     const onDismiss = jest.fn();
     render(<SubscriptionCard subscription={subscription} onDismiss={onDismiss} />);
     fireEvent.press(screen.getByLabelText("Dismiss Netflix"));
     expect(onDismiss).not.toHaveBeenCalled();
-    pressAlertButton(alert, "Dismiss");
+    await pressAlertButton(alert, "Dismiss");
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

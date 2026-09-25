@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { FlatList } from "react-native";
 import Dashboard from "@/app/(tabs)/index";
 import { apiMock, apiError, resetApiMock } from "../test-utils/apiMock";
-import { alertSpy, pressAlertButton, renderScreen, resetApp, router } from "../test-utils/render";
+import { alertSpy, pressAlertButton, renderScreen, resetApp, router, settle } from "../test-utils/render";
 
 jest.mock("@/services/api", () => require("../test-utils/apiMock").apiMock);
 
@@ -68,6 +68,7 @@ describe("Dashboard", () => {
     renderScreen(<Dashboard />);
     fireEvent.press(await screen.findByText("Connect Bank"));
     expect(router().push).toHaveBeenCalledWith("/connect-bank");
+    await settle();
   });
 
   it("shows nothing misleading while the first load is in flight", () => {
@@ -105,12 +106,30 @@ describe("Dashboard", () => {
     expect(router().push).toHaveBeenCalledWith({ pathname: "/connect-bank", params: { itemId: "5" } });
   });
 
-  it("mentions subscriptions that appear to have ended, separately from the total", async () => {
-    serve({ ended: [sub({ id: 3, merchant_name: "peloton", display_name: "Peloton", status: "ended" })] });
+  it("lists ended subscriptions in a collapsed section that is not part of the total", async () => {
+    serve({
+      ended: [sub({ id: 3, merchant_name: "peloton", display_name: "Peloton", amount: 44, last_charge_date: "2026-07-12", status: "ended" })],
+    });
     renderScreen(<Dashboard />);
-    expect(await screen.findByText(/No recent charge from Peloton/)).toBeTruthy();
-    expect(screen.queryByText("Peloton")).toBeNull(); // no card for it, and it is not in the count
-    expect(screen.getAllByLabelText(/^Dismiss /)).toHaveLength(1); // only Netflix has a card
+
+    const header = await screen.findByLabelText("Ended subscriptions, 1");
+    expect(screen.getByText("Ended · 1")).toBeTruthy();
+    expect(screen.queryByText("Peloton")).toBeNull(); // collapsed by default
+    expect(screen.getAllByLabelText(/^Dismiss /)).toHaveLength(1); // no card, nothing to dismiss
+
+    fireEvent.press(header);
+    expect(screen.getByText("Peloton")).toBeTruthy();
+    expect(screen.getByText(/Last charged Jul 12 · was \$44\.00\/mo/)).toBeTruthy();
+
+    fireEvent.press(header);
+    expect(screen.queryByText("Peloton")).toBeNull();
+  });
+
+  it("shows no ended section when nothing has ended", async () => {
+    serve();
+    renderScreen(<Dashboard />);
+    await screen.findByText("Netflix");
+    expect(screen.queryByText(/^Ended/)).toBeNull();
   });
 
   it("dismisses only after confirmation, then reloads the list", async () => {
@@ -123,7 +142,7 @@ describe("Dashboard", () => {
     expect(apiMock.subscriptionsApi.dismiss).not.toHaveBeenCalled(); // asked first
 
     serve({ active: [] });
-    pressAlertButton(alert, "Dismiss");
+    await pressAlertButton(alert, "Dismiss");
     await waitFor(() => expect(apiMock.subscriptionsApi.dismiss).toHaveBeenCalledWith(1));
     expect(await screen.findByText("No subscriptions found")).toBeTruthy();
   });
@@ -135,10 +154,11 @@ describe("Dashboard", () => {
     await screen.findByText("Netflix");
 
     fireEvent.press(screen.getByLabelText("Dismiss Netflix"));
-    pressAlertButton(alert, "Dismiss");
+    await pressAlertButton(alert, "Dismiss");
 
     await waitFor(() => expect(alert).toHaveBeenCalledWith("Couldn't dismiss", "db down"));
     expect(screen.getByText("Netflix")).toBeTruthy();
+    await settle();
   });
 
   describe("pull to refresh", () => {
@@ -173,6 +193,20 @@ describe("Dashboard", () => {
       await refresh();
       expect(screen.getByText("Bank provider error: institution is down")).toBeTruthy();
       expect(screen.getByText("Netflix")).toBeTruthy(); // cached list stays visible
+    });
+
+    it("does not repeat a login problem as a raw error when a Reconnect banner already covers it", async () => {
+      serve();
+      apiMock.plaidApi.sync.mockRejectedValue(apiError(502, "Bank provider error: Your bank needs you to sign in again"));
+      renderScreen(<Dashboard />);
+      await screen.findByText("Netflix");
+
+      serve({ items: [bank({ status: "login_required" })] }); // what the server reports after the failed sync
+      await refresh();
+
+      expect(await screen.findByText(/Chase needs you to sign in again/)).toBeTruthy();
+      expect(screen.queryByText(/Bank provider error/)).toBeNull();
+      await settle();
     });
 
     it("names the banks that failed when only some synced", async () => {

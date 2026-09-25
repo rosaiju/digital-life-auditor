@@ -24,12 +24,32 @@ jest.mock("expo-router", () => {
   };
 });
 
-// TouchableOpacity's press animation finishes after a test's last await; that warning is noise.
-const realConsoleError = console.error;
-jest.spyOn(console, "error").mockImplementation((...args) => {
-  if (typeof args[0] === "string" && args[0].includes("not wrapped in act") && args.join(" ").includes("Animated(")) return;
-  realConsoleError(...args);
-});
-
 // Icon fonts can't load under Jest (expo-font); icons carry no behaviour worth testing.
 jest.mock("@expo/vector-icons", () => ({ Ionicons: () => null }));
+
+// Make Animated.timing finish immediately so press-feedback animations update inside the press's act()
+// instead of ticking on timers after the test has moved on. Layout and behaviour are unaffected.
+const { Animated } = require("react-native");
+jest.spyOn(Animated, "timing").mockImplementation((value, config) => ({
+  start: (callback) => {
+    value.setValue(config.toValue);
+    callback?.({ finished: true });
+  },
+  stop: () => {},
+  reset: () => {},
+}));
+
+// VirtualizedList (FlatList) batches its render-window updates on a timer, which fires outside act().
+// Run the batcher synchronously so those updates happen inside the render/event that caused them.
+jest.mock("@react-native/virtualized-lists/Interaction/Batchinator", () =>
+  class Batchinator {
+    constructor(callback) {
+      this.callback = callback;
+    }
+    schedule() {
+      this.callback();
+    }
+    flushIfScheduled() {}
+    dispose() {}
+  }
+);

@@ -68,7 +68,7 @@ describe("Settings: banks", () => {
     expect(apiMock.plaidApi.disconnect).not.toHaveBeenCalled();
 
     serve([]);
-    pressAlertButton(alert, "Disconnect");
+    await pressAlertButton(alert, "Disconnect");
 
     await waitFor(() => expect(apiMock.plaidApi.disconnect).toHaveBeenCalledWith(5));
     await waitFor(() => expect(screen.queryByText("Chase")).toBeNull());
@@ -79,7 +79,7 @@ describe("Settings: banks", () => {
     apiMock.plaidApi.disconnect.mockRejectedValue(apiError(404, "Connection not found"));
     renderScreen(<Settings />);
     fireEvent.press(await screen.findByText("Disconnect"));
-    pressAlertButton(alert, "Disconnect");
+    await pressAlertButton(alert, "Disconnect");
     await waitFor(() => expect(alert).toHaveBeenCalledWith("Couldn't disconnect", "Connection not found"));
     await settle();
   });
@@ -112,6 +112,15 @@ describe("Settings: sync now", () => {
     renderScreen(<Settings />);
     fireEvent.press(await screen.findByText("Sync Transactions Now"));
     await waitFor(() => expect(alert).toHaveBeenCalledWith("Some banks didn't sync", "Chase: down"));
+    await settle();
+  });
+
+  it("explains that no bank is connected instead of calling it a failure", async () => {
+    serve([]);
+    apiMock.plaidApi.sync.mockRejectedValue(apiError(404, "No connected accounts"));
+    renderScreen(<Settings />);
+    fireEvent.press(await screen.findByText("Sync Transactions Now"));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith("No bank connected", "Connect a bank account first, then sync."));
     await settle();
   });
 
@@ -157,6 +166,7 @@ describe("Settings: subscriptions and account", () => {
     fireEvent.press(screen.getByText("Delete account"));
     expect(router().push).toHaveBeenCalledWith("/change-password");
     expect(router().push).toHaveBeenCalledWith("/delete-account");
+    await settle();
   });
 
   it("signs out after confirmation", async () => {
@@ -164,7 +174,7 @@ describe("Settings: subscriptions and account", () => {
     renderScreen(<Settings />);
     fireEvent.press(await screen.findByText("Sign Out"));
     expect(useAuthStore.getState().token).toBe("test-token");
-    pressAlertButton(alert, "Sign Out");
+    await pressAlertButton(alert, "Sign Out");
     await waitFor(() => expect(useAuthStore.getState().token).toBeNull());
   });
 });
