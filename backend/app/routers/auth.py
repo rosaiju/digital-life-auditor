@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
+from app.ratelimit import limit_auth
 
 router = APIRouter()
 
@@ -89,7 +90,9 @@ def get_current_user(
 
 # ---------- Routes ----------
 
-@router.post("/register", response_model=TokenResponse, status_code=201)
+@router.post(
+    "/register", response_model=TokenResponse, status_code=201, dependencies=[Depends(limit_auth)]
+)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
     email = body.email.lower()
     if db.query(User).filter(User.email == email).first():
@@ -105,7 +108,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     return TokenResponse(access_token=create_access_token(user.id))
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(limit_auth)])
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form.username.lower()).first()
     password_ok = verify_password(form.password, user.hashed_password if user else _DUMMY_HASH)

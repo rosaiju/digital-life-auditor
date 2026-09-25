@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +28,25 @@ class Settings(BaseSettings):
     # Key material for encrypting Plaid access tokens at rest.
     # Falls back to a key derived from JWT_SECRET when unset.
     token_encryption_key: str = ""
+
+    # Max login/register attempts per client address per minute; 0 disables the limit.
+    auth_rate_limit_per_minute: int = 20
+
+    @model_validator(mode="after")
+    def _refuse_weak_config_outside_sandbox(self):
+        """Fail at startup rather than run real bank data behind placeholder secrets."""
+        if self.plaid_env == "sandbox":
+            return self
+        problems = []
+        if len(self.jwt_secret) < 32 or "change_this" in self.jwt_secret:
+            problems.append("JWT_SECRET must be a random value of at least 32 characters")
+        if self.airflow_sync_secret == "airflowsecret" or "change_this" in self.airflow_sync_secret:
+            problems.append("AIRFLOW_SYNC_SECRET must not be the default placeholder")
+        if self.cors_origin_list == ["*"]:
+            problems.append("CORS_ORIGINS must list explicit origins, not '*'")
+        if problems:
+            raise ValueError(f"Unsafe configuration for PLAID_ENV={self.plaid_env}: " + "; ".join(problems))
+        return self
 
     @field_validator("plaid_env")
     @classmethod

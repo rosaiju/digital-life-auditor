@@ -120,8 +120,11 @@ Android notes (tested on an emulator):
 | `TOKEN_ENCRYPTION_KEY` | Optional. Key for encrypting Plaid tokens at rest; defaults to one derived from `JWT_SECRET` |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Optional. Without a key, insights use the rule-based analysis |
 | `CORS_ORIGINS` | Comma-separated allowed origins (`*` for local development only) |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | Max login/register attempts per client address per minute (default 20, `0` disables). In-memory, per process |
 
 Root `.env`: `AIRFLOW_SYNC_SECRET`, used by both Airflow and the backend.
+
+With `PLAID_ENV` set to `development` or `production` the API refuses to start unless `JWT_SECRET` is random and at least 32 characters, `AIRFLOW_SYNC_SECRET` is not the placeholder, and `CORS_ORIGINS` lists explicit origins.
 
 > Groq retires models from time to time. If insights say "rule-based analysis" and the logs show `model_not_found`, list your available models and set `GROQ_MODEL`.
 
@@ -189,4 +192,4 @@ Until then, Plaid rejects the link token (`INVALID_FIELD: Android package name m
 
 ## Security notes and limits
 
-Built and tested against the **Plaid sandbox**. Before handling real accounts you would want: HTTPS in front of the API, a managed secret store and key rotation, Plaid webhooks (instead of only polling) for real-time updates, rate limiting on auth endpoints, an explicit CORS origin list, and Plaid production approval. Insight generation sends only merchant names, amounts and categories to the language model, never bank credentials or account numbers.
+Built and tested against the **Plaid sandbox**. Before handling real accounts you would want: HTTPS in front of the API, a managed secret store and key rotation, Plaid webhooks (instead of only polling) for real-time updates, a shared rate limiter if you run several API replicas (the built-in one is per process), and Plaid production approval. Auth endpoints are rate limited, and non-sandbox environments refuse to start with placeholder secrets or wildcard CORS. Insight generation sends only merchant names, amounts and categories to the language model, never bank credentials or account numbers.

@@ -35,5 +35,6 @@ def test_settings_validate_plaid_env_and_cors():
     base = dict(database_url="sqlite://", plaid_client_id="a", plaid_secret="b", jwt_secret="c")
     with pytest.raises(ValueError):
         Settings(**base, plaid_env="staging")
-    assert Settings(**base, plaid_env="PRODUCTION").plaid_env == "production"
+    hardened = dict(base, jwt_secret="x" * 40, airflow_sync_secret="a-real-shared-secret", cors_origins="https://a.com")
+    assert Settings(**hardened, plaid_env="PRODUCTION").plaid_env == "production"
     assert Settings(**base, cors_origins="http://a.com, http://b.com").cors_origin_list == ["http://a.com", "http://b.com"]

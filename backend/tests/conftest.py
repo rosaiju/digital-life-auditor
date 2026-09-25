@@ -25,6 +25,14 @@ from app.main import app  # noqa: E402
 from app import models as _models  # noqa: E402,F401  (registers all tables on Base.metadata)
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    from app.ratelimit import auth_limiter
+
+    auth_limiter.reset()
+    yield
+
+
 @pytest.fixture()
 def db_session():
     engine = create_engine(
