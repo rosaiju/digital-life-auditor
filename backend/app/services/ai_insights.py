@@ -102,7 +102,7 @@ Respond ONLY with a JSON object of exactly this shape:
 
 Rules:
 - Flag overlapping services in the same category (for example several streaming services)
-- Flag anything over ${HIGH_COST_THRESHOLD:.0f}/month as worth reviewing
+- Flag any single subscription costing over ${HIGH_COST_THRESHOLD:.0f}/month as worth reviewing (the total is not subject to this rule)
 - Be specific: name the services and state exact amounts
 - 4-6 insights at most; potential_savings is a monthly USD amount
 """

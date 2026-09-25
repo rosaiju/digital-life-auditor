@@ -34,3 +34,6 @@ Thumbs.db
 # Airflow
 airflow/logs/
 airflow/plugins/
+
+# Local databases
+*.db

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # AI insights are optional: without a key the rule-based fallback is used.
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
 
     # Comma-separated list of allowed CORS origins ("*" allows any).
     cors_origins: str = "*"

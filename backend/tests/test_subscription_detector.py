@@ -73,6 +73,37 @@ def test_single_charge_is_not_a_subscription():
     assert detect(charges("Netflix", 15.49, 1)) == []
 
 
+# ---------- minimum evidence ----------
+
+def test_two_charges_are_not_enough_for_an_unknown_short_interval_merchant():
+    # Regression (seen in Plaid sandbox): two dry-cleaning visits 6 days apart looked "weekly".
+    assert detect(charges("Town Cleaners", 11.47, 2, every=7)) == []
+    assert detect(charges("Local Yoga Studio", 45.0, 2, every=30)) == []
+
+
+def test_two_charges_are_enough_for_a_known_service():
+    [sub] = detect(charges("Netflix", 15.49, 2))
+    assert sub.frequency == "monthly"
+
+
+@pytest.mark.parametrize("every,expected", [(91, "quarterly"), (365, "annual")])
+def test_two_charges_are_enough_for_long_intervals(every, expected):
+    [sub] = detect(charges("Some Insurance Co", 240.0, 2, every=every))
+    assert sub.frequency == expected
+
+
+@pytest.mark.parametrize("category", ["BANK_FEES", "TRANSFER_OUT", "TRANSFER_IN", "INCOME", "LOAN_PAYMENTS"])
+def test_non_subscription_categories_are_excluded(category):
+    # Regression (seen in Plaid sandbox): monthly "Interest" charges were flagged.
+    txns = [{**t, "category": category} for t in charges("Interest", 111.47, 4)]
+    assert detect(txns) == []
+
+
+def test_other_categories_are_kept():
+    txns = [{**t, "category": "ENTERTAINMENT"} for t in charges("Netflix", 15.49, 4)]
+    assert len(detect(txns)) == 1
+
+
 # ---------- amounts ----------
 
 def test_varying_purchase_amounts_are_not_a_subscription():
@@ -134,7 +165,7 @@ def test_results_sorted_by_monthly_cost_descending():
 
 
 def test_confidence_grows_with_more_occurrences():
-    few = detect(charges("Service A", 9.0, 2))[0].confidence
+    few = detect(charges("Service A", 9.0, 3))[0].confidence
     many = detect(charges("Service A", 9.0, 8))[0].confidence
     assert many > few
     assert 0.3 <= few <= many <= 1.0

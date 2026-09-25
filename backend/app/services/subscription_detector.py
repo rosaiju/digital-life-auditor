@@ -3,11 +3,13 @@
 Pipeline:
   1. Normalize each transaction (ORM objects and dicts are both accepted).
   2. Group by normalized merchant name.
-  3. Drop refunds/credits, collapse same-day duplicates.
+  3. Drop refunds/credits and non-subscription categories (bank fees, transfers,
+     loan payments), collapse same-day duplicates.
   4. Require a stable amount (allowing a price change: the newest run of
      similar charges is used when it has enough occurrences).
   5. Classify the gap between charges as weekly/biweekly/monthly/quarterly/annual.
-  6. Score confidence from occurrence count and interval tightness.
+  6. Score confidence from occurrence count and interval tightness; require
+     enough charges for the frequency (see MIN_CHARGES_UNKNOWN_SHORT_INTERVAL).
   7. Enrich with known-service metadata (display name, category, cancel URL).
 """
 import json
@@ -36,6 +38,15 @@ FREQUENCIES = [
 MAX_AMOUNT_VARIANCE = 0.10   # charges within 10% of each other count as "the same"
 MIN_CONFIDENCE = 0.3
 MIN_OCCURRENCES_AFTER_PRICE_CHANGE = 3
+
+# Two charges are enough evidence for a yearly/quarterly bill, or for a service we
+# recognise. For anything that recurs more often, coincidences are common (two
+# dry-cleaning visits a week apart), so an unrecognised merchant needs three.
+LONG_INTERVALS = {"quarterly", "annual"}
+MIN_CHARGES_UNKNOWN_SHORT_INTERVAL = 3
+
+# Plaid personal-finance categories that recur but are not cancellable subscriptions.
+EXCLUDED_CATEGORIES = {"BANK_FEES", "INCOME", "TRANSFER_IN", "TRANSFER_OUT", "LOAN_PAYMENTS", "LOAN_DISBURSEMENTS"}
 
 _SUFFIX_WORDS = r"(?:inc|llc|ltd|corp|co|com|net|org|usa?|online|app|web|mobile|digital|premium)"
 _STRIP_PATTERNS = [
@@ -146,6 +157,8 @@ def detect(transactions: list) -> list[DetectedSubscription]:
             continue
         if amount <= 0:  # Plaid: positive = money out; negatives are refunds/income
             continue
+        if _field(txn, "category") in EXCLUDED_CATEGORIES:
+            continue
         key = normalize_merchant(merchant)
         if key:
             groups[key].append((_to_date(charge_date), float(amount)))
@@ -173,11 +186,14 @@ def detect(transactions: list) -> list[DetectedSubscription]:
         if confidence < MIN_CONFIDENCE:
             continue
 
+        known = _lookup_known(norm_name)
+        if known is None and frequency not in LONG_INTERVALS and len(run) < MIN_CHARGES_UNKNOWN_SHORT_INTERVAL:
+            continue
+
         # Use the newest amount: it is what the user pays now.
         amount = round(run[-1][1], 2)
         last_charge = dates[-1]
         next_charge = last_charge + timedelta(days=round(mean(intervals)))
-        known = _lookup_known(norm_name)
 
         results.append(
             DetectedSubscription(
