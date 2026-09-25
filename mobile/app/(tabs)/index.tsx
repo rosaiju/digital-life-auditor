@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -9,14 +10,30 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSubscriptions, useDismiss } from "@/hooks/useSubscriptions";
+import { plaidApi } from "@/services/api";
 import { SummaryBanner } from "@/components/SummaryBanner";
 import { SubscriptionCard } from "@/components/SubscriptionCard";
 import { EmptyState } from "@/components/EmptyState";
+import { errorMessage } from "@/utils/alerts";
 
 export default function Dashboard() {
   const router = useRouter();
-  const { data: subscriptions, isLoading, refetch } = useSubscriptions();
+  const { data: subscriptions, isLoading, error, refetch } = useSubscriptions();
   const dismiss = useDismiss();
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Pull-to-refresh asks the bank for new transactions first, then reloads the list.
+  // A 404 just means no bank is connected yet, which is fine.
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await plaidApi.sync();
+    } catch {
+      // ignore: the list reload below still shows whatever we have
+    }
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
   const monthlyTotal = subscriptions?.reduce((sum, s) => sum + s.monthly_cost, 0) ?? 0;
 
@@ -42,7 +59,14 @@ export default function Dashboard() {
           />
         }
         ListEmptyComponent={
-          !isLoading ? (
+          error ? (
+            <EmptyState
+              title="Couldn't load subscriptions"
+              subtitle={errorMessage(error)}
+              actionLabel="Try again"
+              onAction={() => refetch()}
+            />
+          ) : !isLoading ? (
             <EmptyState
               title="No subscriptions found"
               subtitle="Connect a bank account to scan for recurring charges"
@@ -60,8 +84,8 @@ export default function Dashboard() {
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading}
-            onRefresh={refetch}
+            refreshing={refreshing || isLoading}
+            onRefresh={onRefresh}
             tintColor="#6366f1"
           />
         }

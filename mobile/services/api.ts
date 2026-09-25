@@ -1,7 +1,8 @@
 import axios from "axios";
-import { Platform, Alert } from "react-native";
+import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
+// Android emulators reach the host machine at 10.0.2.2; set EXPO_PUBLIC_API_URL for a real device.
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const getToken = () =>
@@ -9,17 +10,10 @@ const getToken = () =>
     ? Promise.resolve(localStorage.getItem("access_token"))
     : SecureStore.getItemAsync("access_token");
 
-export const showAlert = (title: string, message: string) => {
-  if (Platform.OS === "web") {
-    window.alert(`${title}: ${message}`);
-  } else {
-    Alert.alert(title, message);
-  }
-};
-
 export const api = axios.create({
   baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
+  timeout: 60_000, // the first bank sync can take a while
 });
 
 // Attach JWT to every request
@@ -44,15 +38,31 @@ export const authApi = {
   me: () => api.get("/auth/me"),
 };
 
+export interface SyncResult {
+  status: string;
+  accounts?: number;
+  transactions_added?: number;
+  subscriptions_found?: number;
+  synced?: boolean;
+}
+
+export interface PlaidItem {
+  id: number;
+  institution_name: string | null;
+  connected_at: string;
+}
+
 // Plaid
 export const plaidApi = {
-  getLinkToken: () => api.post("/plaid/link-token"),
+  getLinkToken: () => api.post<{ link_token: string }>("/plaid/link-token"),
   exchange: (publicToken: string, institutionName?: string) =>
-    api.post("/plaid/exchange", {
+    api.post<SyncResult>("/plaid/exchange", {
       public_token: publicToken,
       institution_name: institutionName,
     }),
-  sync: () => api.post("/plaid/sync"),
+  sync: () => api.post<SyncResult>("/plaid/sync"),
+  items: () => api.get<PlaidItem[]>("/plaid/items"),
+  disconnect: (id: number) => api.delete(`/plaid/items/${id}`),
 };
 
 // Subscriptions

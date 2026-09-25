@@ -18,9 +18,19 @@ export interface Subscription {
 
 export function useSubscriptions() {
   return useQuery<Subscription[]>({
-    queryKey: ["subscriptions"],
+    queryKey: ["subscriptions", "active"],
     queryFn: async () => {
       const res = await subscriptionsApi.list("active");
+      return res.data;
+    },
+  });
+}
+
+export function useDismissedSubscriptions() {
+  return useQuery<Subscription[]>({
+    queryKey: ["subscriptions", "dismissed"],
+    queryFn: async () => {
+      const res = await subscriptionsApi.list("dismissed");
       return res.data;
     },
   });

@@ -5,13 +5,13 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { Link } from "expo-router";
-import { authApi, showAlert } from "@/services/api";
+import { authApi } from "@/services/api";
+import { showAlert, errorMessage } from "@/utils/alerts";
 import { useAuthStore } from "@/store/auth";
 
 export default function Register() {
@@ -34,8 +34,7 @@ export default function Register() {
       const res = await authApi.register(email, password);
       await setToken(res.data.access_token);
     } catch (e: any) {
-      console.error("Register error:", JSON.stringify(e?.response?.data), e?.message, e?.code);
-      showAlert("Registration failed", e?.response?.data?.detail ?? e?.message ?? "Unknown error");
+      showAlert("Registration failed", errorMessage(e));
     } finally {
       setLoading(false);
     }

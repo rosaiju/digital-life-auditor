@@ -6,54 +6,57 @@ import {
   StyleSheet,
   SafeAreaView,
   ActivityIndicator,
-  Alert,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { PlaidLink, LinkSuccess, LinkExit } from "react-native-plaid-link-sdk";
+import { create, open, LinkSuccess, LinkExit } from "react-native-plaid-link-sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { plaidApi } from "@/services/api";
+import { showAlert, errorMessage } from "@/utils/alerts";
 import { Ionicons } from "@expo/vector-icons";
 
 export default function ConnectBank() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [linkToken, setLinkToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function fetchLinkToken() {
+  async function onPlaidSuccess(success: LinkSuccess) {
     setLoading(true);
     try {
-      const res = await plaidApi.getLinkToken();
-      setLinkToken(res.data.link_token);
-    } catch (e: any) {
-      Alert.alert("Error", "Failed to initialize bank connection");
+      const res = await plaidApi.exchange(success.publicToken, success.metadata.institution?.name);
+      await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+      const found = res.data.subscriptions_found ?? 0;
+      showAlert(
+        "Connected!",
+        res.data.transactions_added
+          ? `Scanned your transactions and found ${found} subscription${found === 1 ? "" : "s"}.`
+          : "Your bank is connected. Transactions can take a minute to become available; pull down on the Subscriptions tab to refresh."
+      );
+      router.replace("/(tabs)");
+    } catch (e) {
+      showAlert("Couldn't connect", errorMessage(e));
     } finally {
       setLoading(false);
     }
   }
 
-  async function onPlaidSuccess(success: LinkSuccess) {
-    try {
-      await plaidApi.exchange(
-        success.publicToken,
-        success.metadata.institution?.name
-      );
-      await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
-      Alert.alert(
-        "Connected!",
-        "Your bank is connected. Scanning for subscriptions...",
-        [{ text: "OK", onPress: () => router.replace("/(tabs)") }]
-      );
-    } catch (e) {
-      Alert.alert("Error", "Failed to connect bank account");
+  function onPlaidExit(exit: LinkExit) {
+    if (exit.error) {
+      showAlert("Connection cancelled", exit.error.displayMessage ?? "Try again");
     }
   }
 
-  function onPlaidExit(exit: LinkExit) {
-    if (exit.error) {
-      Alert.alert("Connection cancelled", exit.error.displayMessage ?? "Try again");
+  async function handleConnect() {
+    setLoading(true);
+    try {
+      const res = await plaidApi.getLinkToken();
+      create({ token: res.data.link_token });
+      await open({ onSuccess: onPlaidSuccess, onExit: onPlaidExit });
+    } catch (e) {
+      showAlert("Couldn't start bank connection", errorMessage(e));
+    } finally {
+      setLoading(false);
     }
-    setLinkToken(null);
   }
 
   return (
@@ -65,15 +68,15 @@ export default function ConnectBank() {
 
         <Text style={styles.title}>Connect Your Bank</Text>
         <Text style={styles.subtitle}>
-          We use Plaid to securely connect to your bank. We never store your
-          credentials and only read transaction history.
+          We use Plaid to securely connect to your bank. Your bank login is never shared with us, we only read
+          transaction history, and the access token is encrypted on our server.
         </Text>
 
         <View style={styles.featureList}>
           {[
-            "Bank-level 256-bit encryption",
-            "Read-only access — we can't move money",
-            "Powered by Plaid, trusted by millions",
+            "Read-only access: we can't move money",
+            "Powered by Plaid, used by thousands of apps",
+            "Disconnect any time in Settings",
           ].map((f) => (
             <View key={f} style={styles.feature}>
               <Ionicons name="checkmark-circle" size={18} color="#22c55e" />
@@ -82,22 +85,16 @@ export default function ConnectBank() {
           ))}
         </View>
 
-        {linkToken ? (
-          <PlaidLink
-            tokenConfig={{ token: linkToken }}
-            onSuccess={onPlaidSuccess}
-            onExit={onPlaidExit}
-          >
-            <View style={styles.button}>
-              <Text style={styles.buttonText}>Open Plaid</Text>
-            </View>
-          </PlaidLink>
+        {Platform.OS === "web" ? (
+          <View style={styles.webNotice}>
+            <Text style={styles.webNoticeText}>
+              Bank linking uses Plaid's native SDK, so it runs in the iOS/Android app (development build), not in the
+              browser. To explore on the web, sign in with the demo account created by
+              {" "}<Text style={styles.code}>python -m app.seed_demo</Text>.
+            </Text>
+          </View>
         ) : (
-          <TouchableOpacity
-            style={styles.button}
-            onPress={fetchLinkToken}
-            disabled={loading}
-          >
+          <TouchableOpacity style={styles.button} onPress={handleConnect} disabled={loading}>
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
@@ -107,7 +104,7 @@ export default function ConnectBank() {
         )}
 
         <Text style={styles.disclaimer}>
-          Sandbox mode: use Chase → user_good / pass_good to test
+          Sandbox mode: choose any bank and sign in with user_good / pass_good
         </Text>
       </View>
     </SafeAreaView>
@@ -130,5 +127,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  disclaimer: { color: "#334155", fontSize: 12, textAlign: "center", marginTop: 20 },
+  webNotice: {
+    backgroundColor: "#1e293b",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  webNoticeText: { color: "#cbd5e1", fontSize: 13, lineHeight: 20 },
+  code: { fontFamily: Platform.OS === "web" ? "monospace" : undefined, color: "#a5b4fc" },
+  disclaimer: { color: "#475569", fontSize: 12, textAlign: "center", marginTop: 20 },
 });

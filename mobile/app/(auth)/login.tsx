@@ -5,13 +5,13 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { Link } from "expo-router";
-import { authApi, showAlert } from "@/services/api";
+import { authApi } from "@/services/api";
+import { showAlert, errorMessage } from "@/utils/alerts";
 import { useAuthStore } from "@/store/auth";
 
 export default function Login() {
@@ -30,7 +30,7 @@ export default function Login() {
       const res = await authApi.login(email, password);
       await setToken(res.data.access_token);
     } catch (e: any) {
-      showAlert("Login failed", e?.response?.data?.detail ?? "Unknown error");
+      showAlert("Login failed", errorMessage(e));
     } finally {
       setLoading(false);
     }

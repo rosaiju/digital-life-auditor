@@ -1,6 +1,7 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Subscription } from "@/hooks/useSubscriptions";
+import { confirm, showAlert } from "@/utils/alerts";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Entertainment: "#7c3aed",
@@ -32,14 +33,21 @@ export function SubscriptionCard({ subscription: s, onDismiss }: Props) {
   const color = CATEGORY_COLORS[s.category ?? "default"] ?? CATEGORY_COLORS.default;
 
   function confirmDismiss() {
-    Alert.alert(
-      "Dismiss subscription",
-      `Remove "${s.display_name ?? s.merchant_name}" from your list?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Dismiss", style: "destructive", onPress: onDismiss },
-      ]
+    confirm(
+      {
+        title: "Dismiss subscription",
+        message: `Remove "${s.display_name ?? s.merchant_name}" from your list? You can restore it in Settings.`,
+        confirmLabel: "Dismiss",
+        destructive: true,
+      },
+      onDismiss
     );
+  }
+
+  function openCancelPage() {
+    if (s.cancel_url) {
+      Linking.openURL(s.cancel_url).catch(() => showAlert("Couldn't open link", s.cancel_url ?? ""));
+    }
   }
 
   const nextCharge = s.next_charge_date
@@ -85,6 +93,11 @@ export function SubscriptionCard({ subscription: s, onDismiss }: Props) {
               ${s.monthly_cost.toFixed(2)}/mo
             </Text>
           </View>
+          {s.cancel_url && (
+            <TouchableOpacity style={styles.cancelBtn} onPress={openCancelPage}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.dismissBtn} onPress={confirmDismiss}>
             <Ionicons name="close" size={14} color="#475569" />
           </TouchableOpacity>
@@ -117,6 +130,14 @@ const styles = StyleSheet.create({
   nextChargeText: { color: "#64748b", fontSize: 12 },
   monthlyCost: { flex: 1 },
   monthlyCostText: { color: "#94a3b8", fontSize: 11 },
+  cancelBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#7f1d1d",
+  },
+  cancelText: { color: "#f87171", fontSize: 11, fontWeight: "600" },
   dismissBtn: {
     width: 26,
     height: 26,

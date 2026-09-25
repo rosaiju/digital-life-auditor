@@ -8,7 +8,8 @@ import {
   SafeAreaView,
   RefreshControl,
 } from "react-native";
-import { useInsights, useGenerateInsights } from "@/hooks/useInsights";
+import { useInsights, useGenerateInsights, hasInsights } from "@/hooks/useInsights";
+import { showAlert, errorMessage } from "@/utils/alerts";
 import { InsightCard } from "@/components/InsightCard";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -17,7 +18,10 @@ export default function Insights() {
   const generate = useGenerateInsights();
 
   function handleGenerate() {
-    generate.mutate(undefined, { onSuccess: () => refetch() });
+    generate.mutate(undefined, {
+      onSuccess: () => refetch(),
+      onError: (e) => showAlert("Couldn't generate insights", errorMessage(e)),
+    });
   }
 
   if (isLoading) {
@@ -28,7 +32,6 @@ export default function Insights() {
     );
   }
 
-  const noInsights = !data || "message" in data;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -53,10 +56,10 @@ export default function Insights() {
           </TouchableOpacity>
         </View>
 
-        {noInsights ? (
+        {!hasInsights(data) ? (
           <EmptyState
             title="No insights yet"
-            subtitle="Tap Generate to let GPT-4o analyze your subscriptions"
+            subtitle="Tap Generate to analyze your subscriptions"
             actionLabel="Generate Insights"
             onAction={handleGenerate}
           />
@@ -113,6 +116,7 @@ export default function Insights() {
 
             <Text style={styles.generatedAt}>
               Generated {new Date(data.generated_at).toLocaleDateString()}
+              {data.source === "rules" ? " · rule-based analysis" : data.source === "ai" ? " · AI-written" : ""}
             </Text>
           </>
         )}
