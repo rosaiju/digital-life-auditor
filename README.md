@@ -50,12 +50,22 @@ digital-life-auditor/
 ├── airflow/dags/              # daily sync DAG
 ├── mobile/                    # Expo app (app/, components/, hooks/, services/, store/, utils/)
 ├── docs/interactive-preview.html   # clickable mock-up of the app
+├── MANUAL_QA.md               # step-by-step manual checks (what was verified, what still needs a person)
 └── docker-compose.yml
 ```
 
 ## Quick start
 
-You need Docker, Node 20+, and (optionally) free [Plaid sandbox](https://dashboard.plaid.com) and [Groq](https://console.groq.com) keys.
+**Prerequisites**
+
+| Tool | Needed for |
+|---|---|
+| Docker (Compose v2) | the backend, Postgres and Airflow |
+| Node 20+ and npm | the mobile app and its tests |
+| JDK 17 and Android Studio (SDK + an emulator) | only for bank linking on Android (`npx expo run:android`) |
+| Python 3.11 | only to run the backend tests outside Docker |
+| A free [Plaid](https://dashboard.plaid.com) account | `PLAID_CLIENT_ID` and the **Sandbox** `PLAID_SECRET` (Team Settings, Keys). Sandbox is free and needs no approval |
+| A free [Groq](https://console.groq.com) key | optional; without it insights use the built-in rule-based analysis |
 
 ### 1. Configure
 
@@ -87,7 +97,7 @@ docker compose exec backend python -m app.seed_demo
 
 This creates `demo@example.com` / `demo-password` with about 14 months of realistic transactions (Netflix, Spotify, a price increase, an annual Adobe charge, a refund, a cancelled Peloton membership, plus everyday spending). Sign in with it in the app to see detection, insights and cancel links working; the cancelled subscription shows up in the "ended" note rather than the total. Use `--reset` to recreate it.
 
-**Suggested demo script (about 3 minutes, no bank needed):** sign in as the demo user, point out the monthly total and the price-increase subscription (Disney+), tap **Cancel** on one to open its cancellation page, dismiss one and restore it from Settings, then open **Insights** and tap **Generate**. To show the real bank flow, connect Tartan Bank (see below) on the Android build.
+**Suggested demo script (about 3 minutes, no bank needed):** sign in as the demo user, point out the monthly total and the price-increase subscription (Disney+), tap **Cancel plan** on one to open its cancellation page, dismiss one and restore it from Settings, scroll to the bottom and expand **Ended** (the cancelled Peloton, kept out of the total), then open **Insights** and tap **Generate**. To show the real bank flow, connect Tartan Bank (see below) on the Android build.
 
 ### 4. Run the app
 
@@ -104,11 +114,12 @@ npm run web                 # browser: everything except bank linking
 npx expo run:android        # or: npx expo run:ios   (needs Android Studio / Xcode)
 ```
 
-Android notes (tested on an emulator):
+Android notes (the full flow, including real Plaid Link, was driven on an emulator; see [MANUAL_QA.md](MANUAL_QA.md)):
 - Use **JDK 17** (`JAVA_HOME`). Android Studio's bundled JDK 25 is too new for the Gradle version React Native 0.76 uses.
 - The first build takes 20+ minutes; later ones are incremental.
 - On a 16 KB-page emulator image Android shows an "app isn't 16 KB compatible" notice. It is expected with React Native 0.76 and harmless.
-- The emulator reaches your backend at `http://10.0.2.2:8000` (`EXPO_PUBLIC_API_URL`).
+- The emulator reaches your backend at `http://10.0.2.2:8000` (`EXPO_PUBLIC_API_URL`). If the app cannot load its JavaScript from Metro, run `adb reverse tcp:8081 tcp:8081`.
+- After the first build only Metro is needed (`npx expo start --dev-client`), unless you add a native dependency.
 
 **Plaid sandbox:** in Link, search for **Tartan Bank** and sign in with `user_transactions_dynamic` / `pass_good`. That user has recurring charges, so subscriptions appear. Banks that use OAuth (Chase and other big banks) open a browser, and on Android they need the app's package name registered in Plaid, see [Bank OAuth on Android](#bank-oauth-on-android). The sandbox needs a moment to prepare transactions; if the list is empty right after connecting, pull down to refresh.
 
@@ -171,7 +182,7 @@ With `PLAID_ENV` set to `development` or `production` the API refuses to start u
 cd backend
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
-pytest                                                   # 150+ tests; SQLite, Plaid and Groq are mocked
+pytest                                                   # 160+ tests; SQLite, Plaid and Groq are mocked
 
 alembic revision --autogenerate -m "describe change"    # after editing models
 alembic upgrade head
@@ -180,12 +191,14 @@ alembic upgrade head
 ```bash
 cd mobile
 npm run typecheck
-npm test                                                 # 80+ tests: store, API client, every screen (Jest + Testing Library)
+npm test                                                 # 85+ tests: store, API client, every screen (Jest + Testing Library)
 ```
 
 CI (GitHub Actions) runs the backend tests on Python 3.11, applies and checks the migrations against real Postgres, typechecks and unit-tests the app and bundles it for web and Android, and smoke-tests `docker compose`.
 
-What the automated tests do **not** cover: the native Plaid Link screen itself (the tests mock the SDK; it was driven by hand on an Android emulator), real bank data beyond the Plaid sandbox, and iOS.
+What the automated tests do **not** cover: the native Plaid Link screen itself (the tests mock the SDK), real bank data beyond the Plaid sandbox, and iOS.
+
+**Verification status.** Driven by hand on an Android emulator against the real Plaid sandbox: sign-up, sign-in, connecting Tartan Bank, sync and repeated sync, subscriptions and insights, dismiss and restore, pull-to-refresh, two banks at once, a partial failure, **Reconnect through Plaid Link update mode** (after forcing the Item into login-required with `/sandbox/item/reset_login`), disconnect and reconnect, sign-out and sign-in as a different user, change password, account deletion (data gone, Plaid token revoked), and an invalid session. Also verified against real Postgres: the 0001 to 0002 migration on a database with data, a full up/down round trip, and two concurrent syncs of one bank. **Not** verified: webhook delivery from Plaid (needs a public URL), a physical device, bank OAuth, iOS. Exact steps for those, and a regression checklist for the rest, are in [MANUAL_QA.md](MANUAL_QA.md).
 
 ## Webhooks
 
@@ -195,7 +208,7 @@ Without webhooks the app still works: transactions refresh daily (Airflow), on p
 2. Set `PLAID_WEBHOOK_URL=https://<your-host>/plaid/webhook` in `backend/.env` and restart. New link tokens now carry the URL (banks connected earlier need to be reconnected once, or use Plaid's `/item/webhook/update`).
 3. In the sandbox you can fire one on demand with Plaid's `/sandbox/item/fire_webhook`.
 
-Every request must carry a valid `Plaid-Verification` JWT (ES256, fresh, body hash matches, key not expired), otherwise it gets a 401. `SYNC_UPDATES_AVAILABLE` triggers a background sync; `ITEM_LOGIN_REQUIRED`, `PENDING_EXPIRATION` and `USER_PERMISSION_REVOKED` flag the bank for reconnection. The signature check is covered by tests using a locally generated key; delivery from real Plaid has not been exercised.
+Every request must carry a valid `Plaid-Verification` JWT (ES256, fresh, body hash matches, key not expired), otherwise it gets a 401. `SYNC_UPDATES_AVAILABLE` triggers a background sync; `ITEM_LOGIN_REQUIRED`, `PENDING_EXPIRATION` and `USER_PERMISSION_REVOKED` flag the bank for reconnection. The signature check is covered by tests using a locally generated key, and the real `webhook_verification_key/get` request was exercised against the sandbox; delivery from real Plaid has not been exercised (steps in [MANUAL_QA.md](MANUAL_QA.md#22-plaid-webhooks-end-to-end-needs-a-public-https-url)). Signing keys are cached for an hour, an unknown key id is a 401 (not an outage), and bodies over 64 KB are rejected with 413. Repeated deliveries are harmless because every handler is idempotent (syncs are cursor based).
 
 ## Bank OAuth on Android
 
@@ -208,6 +221,8 @@ Until then, Plaid rejects the link token (`INVALID_FIELD: Android package name m
 
 ## Troubleshooting
 
+- **The app shows "Can't reach the server"**: the backend is down or `EXPO_PUBLIC_API_URL` is wrong (emulator `http://10.0.2.2:8000`, phone `http://<LAN-ip>:8000`; the backend must listen on `0.0.0.0`, which the Docker setup does).
+- **A bank shows "Sign-in needed"**: expected when the bank asks for a new login. Tap **Reconnect**. To provoke it in the sandbox see [MANUAL_QA.md](MANUAL_QA.md#21-helper-force-the-sandbox-into-a-login-required-state).
 - **`relation ... already exists` / schema errors after updating**: the schema is now managed by Alembic. For a throwaway dev database, reset it with `docker compose down -v` and start again.
 - **Android emulator can't reach the API**: use `EXPO_PUBLIC_API_URL=http://10.0.2.2:8000`. On a physical device use your computer's LAN address.
 - **Airflow gets 403 from the backend**: `AIRFLOW_SYNC_SECRET` must come from the root `.env` so both services see the same value.
