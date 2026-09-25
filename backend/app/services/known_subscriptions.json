@@ -153,5 +153,15 @@
     "display_name": "Crunchyroll",
     "category": "Entertainment",
     "cancel_url": "https://www.crunchyroll.com/account/membership"
+  },
+  "openai": {
+    "display_name": "ChatGPT",
+    "category": "AI Tools",
+    "cancel_url": "https://chat.openai.com/account/billing"
+  },
+  "planet fitness": {
+    "display_name": "Planet Fitness",
+    "category": "Health & Wellness",
+    "cancel_url": null
   }
 }

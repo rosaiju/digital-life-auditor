@@ -2,7 +2,7 @@ from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -14,6 +14,8 @@ router = APIRouter()
 
 
 class SubscriptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     merchant_name: str
     display_name: str | None
@@ -25,21 +27,26 @@ class SubscriptionOut(BaseModel):
     confidence: float
     status: str
     cancel_url: str | None
-    monthly_cost: float
-
-    class Config:
-        from_attributes = True
+    monthly_cost: float  # read from the Subscription.monthly_cost property
 
 
-def _monthly_cost(amount: float, frequency: str) -> float:
-    multipliers = {
-        "weekly": 4.33,
-        "biweekly": 2.17,
-        "monthly": 1.0,
-        "quarterly": 1 / 3,
-        "annual": 1 / 12,
-    }
-    return round(amount * multipliers.get(frequency, 1.0), 2)
+def _get_owned(db: Session, user: User, subscription_id: int) -> Subscription:
+    sub = (
+        db.query(Subscription)
+        .filter(Subscription.id == subscription_id, Subscription.user_id == user.id)
+        .first()
+    )
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    return sub
+
+
+def _set_status(db: Session, user: User, subscription_id: int, status: str) -> Subscription:
+    sub = _get_owned(db, user, subscription_id)
+    sub.status = status
+    db.commit()
+    db.refresh(sub)
+    return sub
 
 
 @router.get("", response_model=list[SubscriptionOut])
@@ -51,26 +58,7 @@ def list_subscriptions(
     query = db.query(Subscription).filter(Subscription.user_id == current_user.id)
     if status != "all":
         query = query.filter(Subscription.status == status)
-    subs = query.order_by(Subscription.amount.desc()).all()
-
-    result = []
-    for s in subs:
-        out = SubscriptionOut(
-            id=s.id,
-            merchant_name=s.merchant_name,
-            display_name=s.display_name,
-            amount=s.amount,
-            frequency=s.frequency,
-            category=s.category,
-            last_charge_date=s.last_charge_date,
-            next_charge_date=s.next_charge_date,
-            confidence=s.confidence,
-            status=s.status,
-            cancel_url=s.cancel_url,
-            monthly_cost=_monthly_cost(s.amount, s.frequency),
-        )
-        result.append(out)
-    return result
+    return sorted(query.all(), key=lambda s: s.monthly_cost, reverse=True)
 
 
 @router.patch("/{subscription_id}/dismiss", response_model=SubscriptionOut)
@@ -79,19 +67,7 @@ def dismiss(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    sub = db.query(Subscription).filter(
-        Subscription.id == subscription_id,
-        Subscription.user_id == current_user.id,
-    ).first()
-    if not sub:
-        raise HTTPException(status_code=404, detail="Subscription not found")
-    sub.status = "dismissed"
-    db.commit()
-    db.refresh(sub)
-    return SubscriptionOut(
-        **{c.name: getattr(sub, c.name) for c in sub.__table__.columns},
-        monthly_cost=_monthly_cost(sub.amount, sub.frequency),
-    )
+    return _set_status(db, current_user, subscription_id, "dismissed")
 
 
 @router.patch("/{subscription_id}/restore", response_model=SubscriptionOut)
@@ -100,16 +76,4 @@ def restore(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    sub = db.query(Subscription).filter(
-        Subscription.id == subscription_id,
-        Subscription.user_id == current_user.id,
-    ).first()
-    if not sub:
-        raise HTTPException(status_code=404, detail="Subscription not found")
-    sub.status = "active"
-    db.commit()
-    db.refresh(sub)
-    return SubscriptionOut(
-        **{c.name: getattr(sub, c.name) for c in sub.__table__.columns},
-        monthly_cost=_monthly_cost(sub.amount, sub.frequency),
-    )
+    return _set_status(db, current_user, subscription_id, "active")

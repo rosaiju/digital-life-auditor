@@ -1,3 +1,6 @@
+import hmac
+import logging
+
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -5,12 +8,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.connection import PlaidItem
-from app.models.transaction import Transaction
-from app.models.subscription import Subscription
 from app.models.user import User
 from app.routers.auth import get_current_user
-from app.services import plaid_service, subscription_detector
+from app.services import plaid_service, sync
+from app.services.plaid_service import PlaidError
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -19,12 +22,18 @@ class ExchangeRequest(BaseModel):
     institution_name: str | None = None
 
 
+def _plaid_failure(exc: PlaidError) -> HTTPException:
+    return HTTPException(status_code=502, detail=f"Bank provider error: {exc.message}")
+
+
 # ---------- Routes ----------
 
 @router.post("/link-token")
 def create_link_token(current_user: User = Depends(get_current_user)):
-    token = plaid_service.create_link_token(current_user.id)
-    return {"link_token": token}
+    try:
+        return {"link_token": plaid_service.create_link_token(current_user.id)}
+    except PlaidError as exc:
+        raise _plaid_failure(exc)
 
 
 @router.post("/exchange")
@@ -33,11 +42,15 @@ def exchange_token(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    data = plaid_service.exchange_public_token(body.public_token)
+    try:
+        data = plaid_service.exchange_public_token(body.public_token)
+    except PlaidError as exc:
+        raise _plaid_failure(exc)
 
-    # Upsert Plaid item
     item = db.query(PlaidItem).filter(PlaidItem.item_id == data["item_id"]).first()
-    if not item:
+    if item and item.user_id != current_user.id:
+        raise HTTPException(status_code=409, detail="This bank connection belongs to another account")
+    if item is None:
         item = PlaidItem(
             user_id=current_user.id,
             access_token=data["access_token"],
@@ -48,102 +61,94 @@ def exchange_token(
         db.commit()
         db.refresh(item)
 
-    # Immediately sync + detect
-    _sync_and_detect(item, current_user.id, db)
-    return {"status": "connected", "institution": item.institution_name}
+    try:
+        stats = sync.sync_item(db, item)
+    except PlaidError as exc:
+        # The connection is saved; the daily sync or a manual sync will retry.
+        logger.warning("Initial sync failed for item %s: %s", item.id, exc.message)
+        return {"status": "connected", "institution": item.institution_name, "synced": False}
+    return {
+        "status": "connected",
+        "institution": item.institution_name,
+        "synced": True,
+        "transactions_added": stats.added,
+        "subscriptions_found": stats.subscriptions,
+    }
 
 
 @router.post("/sync")
-def sync(
+def sync_accounts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     items = db.query(PlaidItem).filter(PlaidItem.user_id == current_user.id).all()
     if not items:
         raise HTTPException(status_code=404, detail="No connected accounts")
-    for item in items:
-        _sync_and_detect(item, current_user.id, db)
-    return {"status": "synced", "accounts": len(items)}
+    added = 0
+    subscriptions = 0
+    try:
+        for item in items:
+            stats = sync.sync_item(db, item)
+            added += stats.added
+            subscriptions = stats.subscriptions
+    except PlaidError as exc:
+        raise _plaid_failure(exc)
+    return {
+        "status": "synced",
+        "accounts": len(items),
+        "transactions_added": added,
+        "subscriptions_found": subscriptions,
+    }
+
+
+@router.get("/items")
+def list_items(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    items = db.query(PlaidItem).filter(PlaidItem.user_id == current_user.id).order_by(PlaidItem.id).all()
+    return [
+        {"id": i.id, "institution_name": i.institution_name, "connected_at": i.created_at.isoformat()}
+        for i in items
+    ]
+
+
+@router.delete("/items/{item_id}", status_code=204)
+def disconnect_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = db.query(PlaidItem).filter(PlaidItem.id == item_id, PlaidItem.user_id == current_user.id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    try:
+        plaid_service.remove_item(item.access_token)
+    except PlaidError as exc:
+        # Still remove it locally so the user isn't stuck with a dead connection.
+        logger.warning("Plaid item removal failed for item %s: %s", item.id, exc.message)
+    db.delete(item)
+    db.commit()
 
 
 @router.post("/sync-all")
 def sync_all(
-    x_airflow_secret: str = Header(None),
+    x_airflow_secret: str = Header(default=""),
     db: Session = Depends(get_db),
 ):
-    """Internal endpoint called by Airflow DAG. Protected by shared secret."""
-    if x_airflow_secret != settings.airflow_sync_secret:
+    """Internal endpoint called by the Airflow DAG. Protected by a shared secret."""
+    if not hmac.compare_digest(x_airflow_secret, settings.airflow_sync_secret):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     items = db.query(PlaidItem).all()
+    synced = 0
+    failed: list[int] = []
     for item in items:
         try:
-            _sync_and_detect(item, item.user_id, db)
-        except Exception:
-            pass  # Don't fail entire batch for one user
-    return {"status": "ok", "items_synced": len(items)}
-
-
-# ---------- Internal ----------
-
-def _sync_and_detect(item: PlaidItem, user_id: int, db: Session):
-    sync_result = plaid_service.sync_transactions(item.access_token, item.cursor)
-
-    for txn in sync_result["transactions"]:
-        exists = db.query(Transaction).filter(
-            Transaction.plaid_transaction_id == txn["transaction_id"]
-        ).first()
-        if exists:
-            continue
-
-        merchant = txn.get("merchant_name") or txn.get("name", "")
-        db_txn = Transaction(
-            user_id=user_id,
-            plaid_transaction_id=txn["transaction_id"],
-            merchant_name=merchant,
-            amount=txn["amount"],
-            date=txn["date"],
-            category=txn.get("personal_finance_category", {}).get("primary"),
-            raw_json=txn,
-        )
-        db.add(db_txn)
-
-    # Update cursor
-    item.cursor = sync_result["cursor"]
-    db.commit()
-
-    # Re-run detection on all user transactions
-    all_txns = db.query(Transaction).filter(Transaction.user_id == user_id).all()
-    detected = subscription_detector.detect(all_txns)
-
-    for sub in detected:
-        existing = db.query(Subscription).filter(
-            Subscription.user_id == user_id,
-            Subscription.merchant_name == sub.merchant_name,
-        ).first()
-
-        if existing:
-            if existing.status == "dismissed":
-                continue
-            existing.amount = sub.amount
-            existing.frequency = sub.frequency
-            existing.last_charge_date = sub.last_charge_date
-            existing.next_charge_date = sub.next_charge_date
-            existing.confidence = sub.confidence
-            if sub.category and not existing.category:
-                existing.category = sub.category
-        else:
-            db.add(Subscription(
-                user_id=user_id,
-                merchant_name=sub.merchant_name,
-                display_name=sub.display_name,
-                amount=sub.amount,
-                frequency=sub.frequency,
-                category=sub.category,
-                last_charge_date=sub.last_charge_date,
-                next_charge_date=sub.next_charge_date,
-                confidence=sub.confidence,
-                cancel_url=sub.cancel_url,
-            ))
-
-    db.commit()
+            sync.sync_item(db, item)
+            synced += 1
+        except Exception:  # one bad connection must not stop the whole batch
+            db.rollback()
+            logger.exception("Sync failed for plaid item %s", item.id)
+            failed.append(item.id)
+    return {"status": "ok" if not failed else "partial", "items_synced": synced, "items_failed": failed}

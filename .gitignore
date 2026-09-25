@@ -12,8 +12,6 @@ dist/
 build/
 .pytest_cache/
 
-# Alembic
-backend/alembic/versions/*.py
 
 # Node / Expo
 node_modules/

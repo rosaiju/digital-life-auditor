@@ -19,7 +19,7 @@ def get_insights(
     insight = (
         db.query(Insight)
         .filter(Insight.user_id == current_user.id)
-        .order_by(Insight.generated_at.desc())
+        .order_by(Insight.generated_at.desc(), Insight.id.desc())
         .first()
     )
     if not insight:
@@ -34,17 +34,11 @@ def generate(
 ):
     subscriptions = (
         db.query(Subscription)
-        .filter(
-            Subscription.user_id == current_user.id,
-            Subscription.status == "active",
-        )
+        .filter(Subscription.user_id == current_user.id, Subscription.status == "active")
         .all()
     )
-
     content = generate_insights(subscriptions)
 
-    insight = Insight(user_id=current_user.id, content=content)
-    db.add(insight)
+    db.add(Insight(user_id=current_user.id, content=content))
     db.commit()
-    db.refresh(insight)
-    return insight.content
+    return content
