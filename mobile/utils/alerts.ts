@@ -32,6 +32,15 @@ export function confirm({ title, message, confirmLabel, destructive }: ConfirmOp
 export function errorMessage(e: any, fallback = "Something went wrong"): string {
   const detail = e?.response?.data?.detail;
   if (typeof detail === "string") return detail;
+  // FastAPI validation errors: [{ msg: "Value error, ..." }, ...]
+  if (Array.isArray(detail) && detail.length > 0) {
+    const messages = detail
+      .map((d) => (typeof d?.msg === "string" ? d.msg.replace(/^Value error, /, "") : null))
+      .filter(Boolean);
+    if (messages.length > 0) return messages.join(". ");
+  }
   if (e?.code === "ERR_NETWORK") return "Can't reach the server. Is the backend running?";
-  return e?.message ?? fallback;
+  if (e?.code === "ECONNABORTED") return "The request timed out. Please try again.";
+  if (e?.response?.status >= 500) return "The server had a problem. Please try again shortly.";
+  return e?.message || fallback;
 }

@@ -1,14 +1,9 @@
 import { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import { useAuthStore } from "@/store/auth";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 1000 * 60 * 5 }, // 5 min cache
-  },
-});
+import { queryClient } from "@/services/queryClient";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { token, isLoading, loadToken } = useAuthStore();

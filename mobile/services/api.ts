@@ -49,6 +49,9 @@ export const authApi = {
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     ),
   me: () => api.get("/auth/me"),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post("/auth/change-password", { current_password: currentPassword, new_password: newPassword }),
+  deleteAccount: (password: string) => api.post("/auth/delete-account", { password }),
 };
 
 export interface SyncResult {
@@ -57,12 +60,18 @@ export interface SyncResult {
   transactions_added?: number;
   subscriptions_found?: number;
   synced?: boolean;
+  /** Banks that failed while others succeeded (status "partial"). */
+  failed?: { id: number; institution_name: string | null; status: string; error: string }[];
 }
 
 export interface PlaidItem {
   id: number;
   institution_name: string | null;
   connected_at: string;
+  /** "login_required" means the user must sign in to their bank again (Reconnect). */
+  status: "ok" | "login_required" | "error";
+  last_synced_at: string | null;
+  last_error: string | null;
 }
 
 // Plaid
@@ -76,11 +85,13 @@ export const plaidApi = {
   sync: () => api.post<SyncResult>("/plaid/sync"),
   items: () => api.get<PlaidItem[]>("/plaid/items"),
   disconnect: (id: number) => api.delete(`/plaid/items/${id}`),
+  reconnectLinkToken: (id: number) => api.post<{ link_token: string }>(`/plaid/items/${id}/link-token`),
+  reconnected: (id: number) => api.post<SyncResult>(`/plaid/items/${id}/reconnected`),
 };
 
 // Subscriptions
 export const subscriptionsApi = {
-  list: (status: "active" | "dismissed" | "all" = "active") =>
+  list: (status: "active" | "dismissed" | "ended" | "all" = "active") =>
     api.get("/subscriptions", { params: { status } }),
   dismiss: (id: number) => api.patch(`/subscriptions/${id}/dismiss`),
   restore: (id: number) => api.patch(`/subscriptions/${id}/restore`),

@@ -10,10 +10,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth";
 import { plaidApi, subscriptionsApi } from "@/services/api";
 import { useDismissedSubscriptions } from "@/hooks/useSubscriptions";
+import { usePlaidItems } from "@/hooks/usePlaidItems";
+import { timeAgo } from "@/utils/dates";
 import { confirm, showAlert, errorMessage } from "@/utils/alerts";
 
 export default function Settings() {
@@ -22,12 +24,7 @@ export default function Settings() {
   const logout = useAuthStore((s) => s.logout);
   const [syncing, setSyncing] = useState(false);
 
-  const token = useAuthStore((s) => s.token);
-  const items = useQuery({
-    queryKey: ["plaid-items"],
-    queryFn: async () => (await plaidApi.items()).data,
-    enabled: !!token,
-  });
+  const items = usePlaidItems();
   const dismissed = useDismissedSubscriptions();
 
   const disconnect = useMutation({
@@ -48,10 +45,22 @@ export default function Settings() {
     setSyncing(true);
     try {
       const res = await plaidApi.sync();
-      await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
+        queryClient.invalidateQueries({ queryKey: ["plaid-items"] }),
+      ]);
       const added = res.data.transactions_added ?? 0;
-      showAlert("Synced", added ? `${added} new transaction${added === 1 ? "" : "s"} found.` : "Everything is up to date.");
+      const failed = res.data.failed ?? [];
+      if (failed.length > 0) {
+        showAlert(
+          "Some banks didn't sync",
+          failed.map((f) => `${f.institution_name ?? "A bank"}: ${f.error}`).join("\n")
+        );
+      } else {
+        showAlert("Synced", added ? `${added} new transaction${added === 1 ? "" : "s"} found.` : "Everything is up to date.");
+      }
     } catch (e: any) {
+      await queryClient.invalidateQueries({ queryKey: ["plaid-items"] }); // the failure is recorded per bank
       showAlert("Sync failed", errorMessage(e, "No connected accounts"));
     } finally {
       setSyncing(false);
@@ -88,15 +97,40 @@ export default function Settings() {
           <Text style={styles.sectionLabel}>BANK ACCOUNTS</Text>
 
           {items.isLoading && <ActivityIndicator color="#6366f1" style={{ marginVertical: 12 }} />}
-          {items.data?.map((item) => (
-            <View key={item.id} style={styles.row}>
-              <Ionicons name="business-outline" size={20} color="#22c55e" />
-              <Text style={styles.rowText}>{item.institution_name ?? "Connected bank"}</Text>
-              <TouchableOpacity onPress={() => handleDisconnect(item.id, item.institution_name)} hitSlop={8}>
-                <Text style={styles.disconnect}>Disconnect</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+          {items.isError && (
+            <Text style={styles.problem}>Couldn't load your banks: {errorMessage(items.error)}</Text>
+          )}
+          {items.data?.map((item) => {
+            const broken = item.status !== "ok";
+            return (
+              <View key={item.id} style={styles.row}>
+                <Ionicons name="business-outline" size={20} color={broken ? "#f59e0b" : "#22c55e"} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.bankName}>{item.institution_name ?? "Connected bank"}</Text>
+                  <Text style={[styles.bankStatus, broken && styles.bankStatusBroken]}>
+                    {item.status === "login_required"
+                      ? "Sign-in needed"
+                      : item.status === "error"
+                      ? "Last sync failed"
+                      : item.last_synced_at
+                      ? `Synced ${timeAgo(item.last_synced_at)}`
+                      : "Not synced yet"}
+                  </Text>
+                </View>
+                {item.status === "login_required" && (
+                  <TouchableOpacity
+                    onPress={() => router.push({ pathname: "/connect-bank", params: { itemId: String(item.id) } })}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.reconnect}>Reconnect</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => handleDisconnect(item.id, item.institution_name)} hitSlop={8}>
+                  <Text style={styles.disconnect}>Disconnect</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
 
           <TouchableOpacity style={styles.row} onPress={() => router.push("/connect-bank")}>
             <Ionicons name="link-outline" size={20} color="#6366f1" />
@@ -125,6 +159,20 @@ export default function Settings() {
             <Ionicons name="eye-outline" size={20} color="#6366f1" />
             <Text style={styles.rowText}>Restore dismissed</Text>
             <Text style={styles.rowValue}>{dismissedCount}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>ACCOUNT</Text>
+          <TouchableOpacity style={styles.row} onPress={() => router.push("/change-password")}>
+            <Ionicons name="key-outline" size={20} color="#6366f1" />
+            <Text style={styles.rowText}>Change password</Text>
+            <Ionicons name="chevron-forward" size={16} color="#475569" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.row} onPress={() => router.push("/delete-account")}>
+            <Ionicons name="trash-outline" size={20} color="#ef4444" />
+            <Text style={[styles.rowText, { color: "#f87171" }]}>Delete account</Text>
+            <Ionicons name="chevron-forward" size={16} color="#475569" />
           </TouchableOpacity>
         </View>
 
@@ -173,6 +221,11 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, color: "#f8fafc", fontSize: 15 },
   rowValue: { color: "#64748b", fontSize: 14 },
   disconnect: { color: "#ef4444", fontSize: 13, fontWeight: "600" },
+  reconnect: { color: "#f59e0b", fontSize: 13, fontWeight: "700" },
+  bankName: { color: "#f8fafc", fontSize: 15 },
+  bankStatus: { color: "#64748b", fontSize: 12, marginTop: 2 },
+  bankStatusBroken: { color: "#f59e0b" },
+  problem: { color: "#f87171", fontSize: 13, marginBottom: 10 },
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",

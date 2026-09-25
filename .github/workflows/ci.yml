@@ -63,6 +63,8 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - name: Unit and screen tests
+        run: npm test
       - name: Bundle for web and Android
         env:
           CI: "1"

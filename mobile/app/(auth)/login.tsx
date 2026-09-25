@@ -13,6 +13,7 @@ import { Link } from "expo-router";
 import { authApi } from "@/services/api";
 import { showAlert, errorMessage } from "@/utils/alerts";
 import { useAuthStore } from "@/store/auth";
+import { normalizeEmail, validateCredentials } from "@/utils/validation";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -21,13 +22,16 @@ export default function Login() {
   const setToken = useAuthStore((s) => s.setToken);
 
   async function handleLogin() {
-    if (!email || !password) {
-      showAlert("Error", "Please enter email and password");
+    if (loading) return;
+    const cleanEmail = normalizeEmail(email);
+    const problem = validateCredentials(cleanEmail, password);
+    if (problem) {
+      showAlert("Check your details", problem);
       return;
     }
     setLoading(true);
     try {
-      const res = await authApi.login(email, password);
+      const res = await authApi.login(cleanEmail, password);
       await setToken(res.data.access_token);
     } catch (e: any) {
       showAlert("Login failed", errorMessage(e));
@@ -50,7 +54,10 @@ export default function Login() {
           placeholder="Email"
           placeholderTextColor="#64748b"
           autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
           keyboardType="email-address"
+          returnKeyType="next"
           value={email}
           onChangeText={setEmail}
         />
@@ -59,6 +66,9 @@ export default function Login() {
           placeholder="Password"
           placeholderTextColor="#64748b"
           secureTextEntry
+          autoComplete="current-password"
+          returnKeyType="go"
+          onSubmitEditing={handleLogin}
           value={password}
           onChangeText={setPassword}
         />

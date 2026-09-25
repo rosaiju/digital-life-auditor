@@ -17,29 +17,22 @@ export interface Subscription {
   monthly_cost: number;
 }
 
-export function useSubscriptions() {
+function useSubscriptionList(status: "active" | "dismissed" | "ended") {
   const token = useAuthStore((s) => s.token);
   return useQuery<Subscription[]>({
-    queryKey: ["subscriptions", "active"],
+    queryKey: ["subscriptions", status],
     enabled: !!token, // don't fire before the saved login has been read from secure storage
     queryFn: async () => {
-      const res = await subscriptionsApi.list("active");
+      const res = await subscriptionsApi.list(status);
       return res.data;
     },
   });
 }
 
-export function useDismissedSubscriptions() {
-  const token = useAuthStore((s) => s.token);
-  return useQuery<Subscription[]>({
-    queryKey: ["subscriptions", "dismissed"],
-    enabled: !!token,
-    queryFn: async () => {
-      const res = await subscriptionsApi.list("dismissed");
-      return res.data;
-    },
-  });
-}
+export const useSubscriptions = () => useSubscriptionList("active");
+export const useDismissedSubscriptions = () => useSubscriptionList("dismissed");
+/** Subscriptions whose charges stopped (probably cancelled). */
+export const useEndedSubscriptions = () => useSubscriptionList("ended");
 
 export function useDismiss() {
   const queryClient = useQueryClient();

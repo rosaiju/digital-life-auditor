@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Linking } from "react-native"
 import { Ionicons } from "@expo/vector-icons";
 import type { Subscription } from "@/hooks/useSubscriptions";
 import { confirm, showAlert } from "@/utils/alerts";
+import { formatShortDate } from "@/utils/dates";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Entertainment: "#7c3aed",
@@ -50,12 +51,7 @@ export function SubscriptionCard({ subscription: s, onDismiss }: Props) {
     }
   }
 
-  const nextCharge = s.next_charge_date
-    ? new Date(s.next_charge_date).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      })
-    : null;
+  const nextCharge = s.next_charge_date ? formatShortDate(s.next_charge_date) : null;
 
   return (
     <View style={styles.card}>
@@ -98,7 +94,12 @@ export function SubscriptionCard({ subscription: s, onDismiss }: Props) {
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.dismissBtn} onPress={confirmDismiss}>
+          <TouchableOpacity
+            style={styles.dismissBtn}
+            onPress={confirmDismiss}
+            accessibilityRole="button"
+            accessibilityLabel={`Dismiss ${s.display_name ?? s.merchant_name}`}
+          >
             <Ionicons name="close" size={14} color="#475569" />
           </TouchableOpacity>
         </View>

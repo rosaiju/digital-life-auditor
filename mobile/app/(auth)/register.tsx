@@ -13,6 +13,7 @@ import { Link } from "expo-router";
 import { authApi } from "@/services/api";
 import { showAlert, errorMessage } from "@/utils/alerts";
 import { useAuthStore } from "@/store/auth";
+import { normalizeEmail, validateCredentials } from "@/utils/validation";
 
 export default function Register() {
   const [email, setEmail] = useState("");
@@ -21,17 +22,16 @@ export default function Register() {
   const setToken = useAuthStore((s) => s.setToken);
 
   async function handleRegister() {
-    if (!email || !password) {
-      showAlert("Error", "Please fill in all fields");
-      return;
-    }
-    if (password.length < 8) {
-      showAlert("Error", "Password must be at least 8 characters");
+    if (loading) return;
+    const cleanEmail = normalizeEmail(email);
+    const problem = validateCredentials(cleanEmail, password, { newAccount: true });
+    if (problem) {
+      showAlert("Check your details", problem);
       return;
     }
     setLoading(true);
     try {
-      const res = await authApi.register(email, password);
+      const res = await authApi.register(cleanEmail, password);
       await setToken(res.data.access_token);
     } catch (e: any) {
       showAlert("Registration failed", errorMessage(e));
@@ -54,7 +54,10 @@ export default function Register() {
           placeholder="Email"
           placeholderTextColor="#64748b"
           autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
           keyboardType="email-address"
+          returnKeyType="next"
           value={email}
           onChangeText={setEmail}
         />
@@ -63,6 +66,9 @@ export default function Register() {
           placeholder="Password (min 8 characters)"
           placeholderTextColor="#64748b"
           secureTextEntry
+          autoComplete="new-password"
+          returnKeyType="go"
+          onSubmitEditing={handleRegister}
           value={password}
           onChangeText={setPassword}
         />

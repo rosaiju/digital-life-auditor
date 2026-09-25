@@ -12,9 +12,10 @@ import { useInsights, useGenerateInsights, hasInsights } from "@/hooks/useInsigh
 import { showAlert, errorMessage } from "@/utils/alerts";
 import { InsightCard } from "@/components/InsightCard";
 import { EmptyState } from "@/components/EmptyState";
+import { parseTimestamp } from "@/utils/dates";
 
 export default function Insights() {
-  const { data, isLoading, refetch } = useInsights();
+  const { data, isLoading, isRefetching, isError, error, refetch } = useInsights();
   const generate = useGenerateInsights();
 
   function handleGenerate() {
@@ -32,13 +33,26 @@ export default function Insights() {
     );
   }
 
+  if (isError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <EmptyState
+          title="Couldn't load insights"
+          subtitle={errorMessage(error)}
+          actionLabel="Try again"
+          onAction={() => refetch()}
+        />
+      </SafeAreaView>
+    );
+  }
+
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#6366f1" />
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6366f1" />
         }
       >
         <View style={styles.header}>
@@ -115,7 +129,7 @@ export default function Insights() {
             )}
 
             <Text style={styles.generatedAt}>
-              Generated {new Date(data.generated_at).toLocaleDateString()}
+              Generated {parseTimestamp(data.generated_at).toLocaleDateString()}
               {data.source === "rules" ? " · rule-based analysis" : data.source === "ai" ? " · AI-written" : ""}
             </Text>
           </>

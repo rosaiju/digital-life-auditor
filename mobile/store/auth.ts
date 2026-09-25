@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
+import { queryClient } from "@/services/queryClient";
 
 const storage = {
   getItem: (key: string) =>
@@ -30,17 +31,28 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
 
   setToken: async (token) => {
+    queryClient.clear(); // never show a previous session's data to whoever signs in next
     await storage.setItem("access_token", token);
     set({ token });
   },
 
   loadToken: async () => {
-    const token = await storage.getItem("access_token");
+    let token: string | null = null;
+    try {
+      token = await storage.getItem("access_token");
+    } catch {
+      // unreadable secure storage: treat as signed out rather than hanging on the splash state
+    }
     set({ token, isLoading: false });
   },
 
   logout: async () => {
-    await storage.deleteItem("access_token");
+    queryClient.clear();
     set({ token: null });
+    try {
+      await storage.deleteItem("access_token");
+    } catch {
+      // the in-memory token is already gone; a stale stored one is rejected by the server
+    }
   },
 }));

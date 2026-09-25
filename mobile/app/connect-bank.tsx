@@ -8,7 +8,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { create, open, LinkSuccess, LinkExit } from "react-native-plaid-link-sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { plaidApi } from "@/services/api";
@@ -19,12 +19,29 @@ export default function ConnectBank() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
+  // Present when the user is fixing a bank whose login expired (Link "update mode").
+  const { itemId } = useLocalSearchParams<{ itemId?: string }>();
+  const reconnectId = itemId ? Number(itemId) : null;
+
+  async function refreshAfterLink() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
+      queryClient.invalidateQueries({ queryKey: ["plaid-items"] }),
+    ]);
+  }
 
   async function onPlaidSuccess(success: LinkSuccess) {
     setLoading(true);
     try {
+      if (reconnectId !== null) {
+        await plaidApi.reconnected(reconnectId);
+        await refreshAfterLink();
+        showAlert("Reconnected", "Your bank is syncing again.");
+        router.replace("/(tabs)");
+        return;
+      }
       const res = await plaidApi.exchange(success.publicToken, success.metadata.institution?.name);
-      await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+      await refreshAfterLink();
       const found = res.data.subscriptions_found ?? 0;
       showAlert(
         "Connected!",
@@ -49,7 +66,7 @@ export default function ConnectBank() {
   async function handleConnect() {
     setLoading(true);
     try {
-      const res = await plaidApi.getLinkToken();
+      const res = reconnectId !== null ? await plaidApi.reconnectLinkToken(reconnectId) : await plaidApi.getLinkToken();
       create({ token: res.data.link_token });
       await open({ onSuccess: onPlaidSuccess, onExit: onPlaidExit });
     } catch (e) {
@@ -62,11 +79,11 @@ export default function ConnectBank() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.inner}>
-        <TouchableOpacity style={styles.back} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.back} onPress={() => router.back()} accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={22} color="#94a3b8" />
         </TouchableOpacity>
 
-        <Text style={styles.title}>Connect Your Bank</Text>
+        <Text style={styles.title}>{reconnectId !== null ? "Reconnect Your Bank" : "Connect Your Bank"}</Text>
         <Text style={styles.subtitle}>
           We use Plaid to securely connect to your bank. Your bank login is never shared with us, we only read
           transaction history, and the access token is encrypted on our server.
@@ -98,7 +115,7 @@ export default function ConnectBank() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Connect a Bank Account</Text>
+              <Text style={styles.buttonText}>{reconnectId !== null ? "Sign in to your bank again" : "Connect a Bank Account"}</Text>
             )}
           </TouchableOpacity>
         )}
