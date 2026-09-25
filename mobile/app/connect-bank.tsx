@@ -4,10 +4,10 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   Platform,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { create, open, LinkSuccess, LinkExit } from "react-native-plaid-link-sdk";
 import { useQueryClient } from "@tanstack/react-query";

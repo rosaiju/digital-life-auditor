@@ -5,9 +5,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
-  SafeAreaView,
   RefreshControl,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useInsights, useGenerateInsights, hasInsights } from "@/hooks/useInsights";
 import { showAlert, errorMessage } from "@/utils/alerts";
 import { InsightCard } from "@/components/InsightCard";

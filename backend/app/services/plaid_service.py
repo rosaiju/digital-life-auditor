@@ -57,12 +57,16 @@ def _plain(obj: Any) -> Any:
 
 
 def create_link_token(user_id: int) -> str:
+    options = {}
+    if settings.plaid_android_package_name:
+        options["android_package_name"] = settings.plaid_android_package_name
     request = LinkTokenCreateRequest(
         products=[Products("transactions")],
         client_name="Digital Life Auditor",
         country_codes=[CountryCode("US")],
         language="en",
         user=LinkTokenCreateRequestUser(client_user_id=str(user_id)),
+        **options,
     )
     try:
         return get_client().link_token_create(request)["link_token"]

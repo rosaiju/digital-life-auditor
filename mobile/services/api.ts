@@ -1,6 +1,7 @@
 import axios from "axios";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { useAuthStore } from "@/store/auth";
 
 // Android emulators reach the host machine at 10.0.2.2; set EXPO_PUBLIC_API_URL for a real device.
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -24,6 +25,18 @@ api.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+// An expired or revoked token sends the user back to the login screen instead of leaving
+// every screen showing errors. (A failed login has no token yet, so it is left alone.)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && error.config?.headers?.Authorization) {
+      void useAuthStore.getState().logout();
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Auth
 export const authApi = {

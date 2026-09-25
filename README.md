@@ -99,7 +99,13 @@ npm run web                 # browser: everything except bank linking
 npx expo run:android        # or: npx expo run:ios   (needs Android Studio / Xcode)
 ```
 
-In the Plaid sandbox, pick any bank and sign in with `user_good` / `pass_good`. The sandbox needs a moment to prepare transactions; if the list is empty right after connecting, pull down to refresh.
+Android notes (tested on an emulator):
+- Use **JDK 17** (`JAVA_HOME`). Android Studio's bundled JDK 25 is too new for the Gradle version React Native 0.76 uses.
+- The first build takes 20+ minutes; later ones are incremental.
+- On a 16 KB-page emulator image Android shows an "app isn't 16 KB compatible" notice. It is expected with React Native 0.76 and harmless.
+- The emulator reaches your backend at `http://10.0.2.2:8000` (`EXPO_PUBLIC_API_URL`).
+
+**Plaid sandbox:** in Link, search for **Tartan Bank** and sign in with `user_transactions_dynamic` / `pass_good`. That user has recurring charges, so subscriptions appear. Banks that use OAuth (Chase and other big banks) open a browser, and on Android they need the app's package name registered in Plaid, see [Bank OAuth on Android](#bank-oauth-on-android). The sandbox needs a moment to prepare transactions; if the list is empty right after connecting, pull down to refresh.
 
 ## Configuration
 
@@ -109,6 +115,7 @@ In the Plaid sandbox, pick any bank and sign in with `user_good` / `pass_good`. 
 |---|---|
 | `DATABASE_URL` | Postgres URL (docker compose overrides it) |
 | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | Plaid credentials; `sandbox`, `development` or `production` |
+| `PLAID_ANDROID_PACKAGE_NAME` | Optional. Set to `com.rosaiju.digitallifeauditor` once registered in the Plaid dashboard (needed for bank OAuth on Android) |
 | `JWT_SECRET` | Signs login tokens. Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `TOKEN_ENCRYPTION_KEY` | Optional. Key for encrypting Plaid tokens at rest; defaults to one derived from `JWT_SECRET` |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Optional. Without a key, insights use the rule-based analysis |
@@ -164,6 +171,15 @@ npm run typecheck
 ```
 
 CI (GitHub Actions) runs the backend tests on Python 3.11, applies and checks the migrations against real Postgres, typechecks the app and bundles it for web and Android, and smoke-tests `docker compose`.
+
+## Bank OAuth on Android
+
+Big banks (Chase, etc.) authenticate in the browser and then redirect back to the app by its **Android package name**. Plaid only allows that for registered package names:
+
+1. Plaid dashboard, **Developers, API, Allowed Android package names**, add `com.rosaiju.digitallifeauditor`.
+2. Set `PLAID_ANDROID_PACKAGE_NAME=com.rosaiju.digitallifeauditor` in `backend/.env` and restart the backend.
+
+Until then, Plaid rejects the link token (`INVALID_FIELD: Android package name must be configured in the developer dashboard`) if the package name is sent, and if it is not sent, the OAuth page ends at "close this page and continue" and the connection never reaches the app. Non-OAuth banks (Tartan Bank in the sandbox) work without any of this.
 
 ## Troubleshooting
 

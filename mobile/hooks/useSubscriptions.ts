@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { subscriptionsApi } from "@/services/api";
+import { useAuthStore } from "@/store/auth";
 
 export interface Subscription {
   id: number;
@@ -17,8 +18,10 @@ export interface Subscription {
 }
 
 export function useSubscriptions() {
+  const token = useAuthStore((s) => s.token);
   return useQuery<Subscription[]>({
     queryKey: ["subscriptions", "active"],
+    enabled: !!token, // don't fire before the saved login has been read from secure storage
     queryFn: async () => {
       const res = await subscriptionsApi.list("active");
       return res.data;
@@ -27,8 +30,10 @@ export function useSubscriptions() {
 }
 
 export function useDismissedSubscriptions() {
+  const token = useAuthStore((s) => s.token);
   return useQuery<Subscription[]>({
     queryKey: ["subscriptions", "dismissed"],
+    enabled: !!token,
     queryFn: async () => {
       const res = await subscriptionsApi.list("dismissed");
       return res.data;

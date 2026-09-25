@@ -6,8 +6,8 @@ import {
   RefreshControl,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useSubscriptions, useDismiss } from "@/hooks/useSubscriptions";
 import { plaidApi } from "@/services/api";
@@ -18,7 +18,7 @@ import { errorMessage } from "@/utils/alerts";
 
 export default function Dashboard() {
   const router = useRouter();
-  const { data: subscriptions, isLoading, error, refetch } = useSubscriptions();
+  const { data: subscriptions, isLoading, isPending, error, refetch } = useSubscriptions();
   const dismiss = useDismiss();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -66,7 +66,7 @@ export default function Dashboard() {
               actionLabel="Try again"
               onAction={() => refetch()}
             />
-          ) : !isLoading ? (
+          ) : !isPending ? (
             <EmptyState
               title="No subscriptions found"
               subtitle="Connect a bank account to scan for recurring charges"

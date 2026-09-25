@@ -252,3 +252,24 @@ def test_sync_all_syncs_every_item_and_reports_failures(client, register, fake_p
     assert partial["status"] == "partial"
     assert partial["items_synced"] == 0
     assert len(partial["items_failed"]) == 2
+
+
+# ---------- link token options ----------
+
+def test_link_token_request_includes_android_package_only_when_configured(monkeypatch):
+    sent = []
+
+    class FakeClient:
+        def link_token_create(self, request):
+            sent.append(request)
+            return {"link_token": "link-sandbox-x"}
+
+    monkeypatch.setattr(plaid_service, "get_client", lambda: FakeClient())
+
+    monkeypatch.setattr(plaid_service.settings, "plaid_android_package_name", "")
+    plaid_service.create_link_token(1)
+    assert "android_package_name" not in sent[-1].to_dict()
+
+    monkeypatch.setattr(plaid_service.settings, "plaid_android_package_name", "com.example.app")
+    assert plaid_service.create_link_token(1) == "link-sandbox-x"
+    assert sent[-1].to_dict()["android_package_name"] == "com.example.app"

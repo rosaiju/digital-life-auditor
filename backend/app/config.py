@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     plaid_client_id: str
     plaid_secret: str
     plaid_env: str = "sandbox"
+    # Needed for bank OAuth flows on Android (e.g. Chase): Plaid redirects back to the app by
+    # package name. It must ALSO be registered in the Plaid dashboard (Developers > API >
+    # Allowed Android package names) or Plaid rejects the link token with INVALID_FIELD.
+    plaid_android_package_name: str = ""
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 10080  # 7 days

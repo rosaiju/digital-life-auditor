@@ -4,10 +4,10 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,7 +22,12 @@ export default function Settings() {
   const logout = useAuthStore((s) => s.logout);
   const [syncing, setSyncing] = useState(false);
 
-  const items = useQuery({ queryKey: ["plaid-items"], queryFn: async () => (await plaidApi.items()).data });
+  const token = useAuthStore((s) => s.token);
+  const items = useQuery({
+    queryKey: ["plaid-items"],
+    queryFn: async () => (await plaidApi.items()).data,
+    enabled: !!token,
+  });
   const dismissed = useDismissedSubscriptions();
 
   const disconnect = useMutation({

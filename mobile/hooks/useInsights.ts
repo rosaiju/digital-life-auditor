@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { insightsApi } from "@/services/api";
+import { useAuthStore } from "@/store/auth";
 
 export interface Insight {
   type: "redundant" | "savings" | "warning" | "tip";
@@ -29,8 +30,10 @@ export function hasInsights(data: InsightsResponse | undefined): data is Insight
 }
 
 export function useInsights() {
+  const token = useAuthStore((s) => s.token);
   return useQuery<InsightsResponse>({
     queryKey: ["insights"],
+    enabled: !!token,
     queryFn: async () => {
       const res = await insightsApi.get();
       return res.data;
