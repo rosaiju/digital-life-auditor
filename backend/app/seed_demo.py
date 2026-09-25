@@ -12,9 +12,8 @@ import argparse
 import random
 from datetime import date, timedelta
 
+from app.config import settings
 from app.database import SessionLocal
-from app.models.insight import Insight
-from app.models.subscription import Subscription
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.routers.auth import hash_password
@@ -104,6 +103,9 @@ def seed(email: str = DEMO_EMAIL, password: str = DEMO_PASSWORD, reset: bool = F
 
 
 def main() -> None:
+    if settings.plaid_env != "sandbox":
+        # The demo user has a well-known password: never create it next to real bank data.
+        raise SystemExit(f"Refusing to seed demo data with PLAID_ENV={settings.plaid_env}; it is for sandbox/dev only.")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--email", default=DEMO_EMAIL)
     parser.add_argument("--password", default=DEMO_PASSWORD, help="only used when creating the user")

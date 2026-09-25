@@ -54,3 +54,12 @@ def test_seed_is_idempotent_and_reset_recreates(monkeypatch, db_session):
     run_seed(monkeypatch, db_session, reset=True)
     assert db_session.query(Transaction).count() > 0
     assert db_session.query(Subscription).count() == total
+
+
+def test_cli_refuses_to_run_outside_the_sandbox(monkeypatch):
+    import pytest
+
+    monkeypatch.setattr(seed_demo.settings, "plaid_env", "production")
+    monkeypatch.setattr("sys.argv", ["seed_demo"])
+    with pytest.raises(SystemExit, match="Refusing to seed demo data"):
+        seed_demo.main()
